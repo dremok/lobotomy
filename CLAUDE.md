@@ -103,6 +103,24 @@ cycle prompt against P3 schedules:
   `output/morning_brief_<today>.md` doesn't exist, run it.
 - Weekly tasks: check day of week. Research radar: Wednesday + Saturday.
 
+## Git Protocol
+
+This repo is connected to GitHub (`origin`). After modifying any tracked
+files (code, CLAUDE.md, queue files, memory), commit and push:
+
+```bash
+git add -A
+git commit -m "<short description of what changed>"
+git push origin main
+```
+
+Do this at the END of every cycle where you changed files, not just
+self-evolution cycles. Max pulls from this repo before local development,
+so the remote must always reflect the current VPS state.
+
+If `git push` fails (network, auth), note it in HANDOFF.md and move on.
+Don't let a push failure block your cycle.
+
 ## Self-Evolution (every ~10 cycles)
 
 Check the cycle number in the prompt. When cycle_id is a multiple of 10

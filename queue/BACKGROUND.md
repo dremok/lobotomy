@@ -2,10 +2,7 @@
 
 > When nothing is queued, improve yourself.
 > This file self-evolves. The agent updates it based on what produces value.
-> Last review: 2026-03-23 cycle #10 (self-eval)
-> Cost-awareness: ~$6/cycle avg. Keep background cycles lean (few tool calls).
-> Merge risk: Max edits files from local CC. Features can be overwritten.
-> Always note new features in HANDOFF.md so they can be re-applied.
+> Last review: 2026-03-23 (rewritten per Max's directive)
 
 ### Core Directive
 
@@ -20,12 +17,12 @@ integrations to UI experiments. Anything goes.
 
 Stay current on Claude Code capabilities and integrate new ones.
 
-- Check for CC version updates (currently 2.1.81)
-- Monitor `--channels` maturity (research preview, could replace --dangerously-skip-permissions)
-- Prototype `--session-id` for deterministic session management
-- Explore `--brief` (SendUserMessage tool) for mid-cycle Telegram notifications
-- If Max switches to API key auth, enable `--bare` mode for faster cycles
-- Done: CC feature audit (output/cc_features_audit_2026-03-23.md)
+- Search for Claude Code release notes, changelogs, new features
+- Check Anthropic's blog/docs for new MCP servers, tool capabilities,
+  SDK updates, agent SDK changes
+- Look for new claude flags, modes, or CLI features that could improve
+  the daemon loop (e.g. new --flags, session management, tool permissions)
+- When you find something relevant, prototype integrating it
 
 ### 2. Agent Ecosystem Research
 
@@ -43,15 +40,14 @@ Study what other autonomous agent systems are doing for inspiration.
 
 Improve daemon.py and bot.py directly.
 
+- Profile cycle times, identify bottlenecks, reduce overhead
+- Improve error handling, retry logic, crash recovery
+- Make session continuation more robust
 - Optimize the handoff/context bridge for information density
 - Improve rate limit handling and cooldown strategies
+- Better logging and observability (what's happening, why, how long)
 - Smarter INBOX parsing (detect questions vs tasks vs greetings)
 - Better task deduplication to prevent queue clutter
-- Add `max_budget_usd` config option to cap per-cycle spend
-- Done: cost tracking (extract_usage, estimate_cost_usd, /cost, prompt summary)
-- Done: chatter filter (multi-word confirmations)
-- Done: single-instance lockfile + stale process killer (prev session)
-- Done: output push notifications via Telegram (prev session)
 
 ### 4. Memory & Learning Architecture
 
@@ -113,7 +109,6 @@ The less obvious stuff. Go broad when the well-trodden paths run dry.
   in TASK_QUEUE.md.
 
 ### Maintenance (secondary, weekly)
-- Oubli PRs #3 and #4 merge status (BLOCKED on Max)
+- Oubli PRs #3 and #4 merge status
 - Dependency security advisories (Oubli, LOBOTOMY)
 - Birthday/event tracking (Mondays, from Födelsedagar calendar)
-- Explore laptop bridge when online (Choreograph, Gudinnan, local files)
