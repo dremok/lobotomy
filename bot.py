@@ -79,20 +79,32 @@ def wake_daemon():
         pass
 
 
+_laptop_online: bool = False
+_laptop_check_time: float = 0.0
+LAPTOP_CHECK_TTL = 300  # Cache laptop status for 5 minutes
+
+
 def check_laptop() -> bool:
-    """Check if laptop is reachable via Tailscale. Returns False if disabled."""
+    """Check if laptop is reachable via Tailscale. Cached for 5 minutes."""
+    global _laptop_online, _laptop_check_time
+    import time
+    now = time.time()
+    if now - _laptop_check_time < LAPTOP_CHECK_TTL:
+        return _laptop_online
     if not LAPTOP_CONFIG or not LAPTOP_CONFIG.get("enabled"):
         return False
     try:
         r = subprocess.run(
-            ["tailscale", "ping", "-c", "1", "--timeout", "3s",
+            ["tailscale", "ping", "-c", "1", "--timeout", "2s",
              LAPTOP_CONFIG.get("hostname", "maxs-laptop")],
             capture_output=True,
-            timeout=5,
+            timeout=4,
         )
-        return r.returncode == 0
+        _laptop_online = r.returncode == 0
     except Exception:
-        return False
+        _laptop_online = False
+    _laptop_check_time = now
+    return _laptop_online
 
 
 def laptop_ssh_cmd(cmd: str) -> str:
@@ -266,7 +278,22 @@ async def respond_via_cc(message_text: str) -> str:
         "SSH in and read them. If it's offline, say so briefly."
     )
 
-    return await run_cc_quick(prompt, timeout=60)
+    # Try with tools first (can read files to answer properly)
+    response = await run_cc_quick(prompt, timeout=45, effort="low")
+    if response:
+        return response
+
+    # Fallback: quick text-only response if tool-based response timed out
+    fallback_prompt = (
+        "You are Son of Max, responding via Telegram.\n"
+        f"Conversation:\n{format_history()}\n"
+        f"Max's message: {message_text}\n\n"
+        f"Context: {handoff[:500]}\n\n"
+        "Respond briefly and conversationally. No markdown. No em dashes. "
+        "If you can't fully answer, say what you know and that you'll "
+        "look into it."
+    )
+    return await run_cc_quick(fallback_prompt, timeout=15, tools="", effort="low")
 
 
 async def summarize_output(filename: str, content: str) -> str:
@@ -613,13 +640,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #    CC can read files directly to answer questions.
     _conversation.append(("user", text))
     response = await respond_via_cc(text)
-    if response:
-        _conversation.append(("assistant", response))
-        await update.message.reply_text(response)
-    else:
-        fallback = "On it. Give me a few minutes."
-        _conversation.append(("assistant", fallback))
-        await update.message.reply_text(fallback)
+    if not response:
+        response = "Got your message, looking into it."
+    _conversation.append(("assistant", response))
+    await update.message.reply_text(response)
 
 
 # ─── Proactive output notifications ────────────────────────────────────────
