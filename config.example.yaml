@@ -22,7 +22,7 @@ laptop:
   enabled: false
   hostname: maxs-laptop   # Tailscale hostname
   ssh_key: ~/.ssh/laptop_key
-  user: lobotomy           # Restricted read-only OS user
+  user: lobster            # Restricted read-only OS user
 
 # Telegram bot (phone steering)
 telegram:

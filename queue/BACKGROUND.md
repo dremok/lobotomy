@@ -1,64 +1,119 @@
 ## Background Radiation Tasks
 
-> Low-priority tasks to run when nothing is queued.
+> When nothing is queued, improve yourself.
 > This file self-evolves. The agent updates it based on what produces value.
-> Last review: Cycle #30 (2026-03-20)
+> Last review: 2026-03-23 cycle #10 (self-eval)
+> Cost-awareness: ~$6/cycle avg. Keep background cycles lean (few tool calls).
+> Merge risk: Max edits files from local CC. Features can be overwritten.
+> Always note new features in HANDOFF.md so they can be re-applied.
 
-### Research & Intelligence
-- Surface ML/AI developments relevant to Max's work: arxiv papers (GNNs,
-  RAG evaluation, embeddings, agentic architectures), HuggingFace trending,
-  MTEB leaderboard shifts. **Cap at 1 intelligence report per day after
-  the initial day.** Consolidate into a single scan rather than separate
-  arxiv/HF/competitor/framework passes.
-- Monitor agent framework releases: LangChain, LlamaIndex, CrewAI, smolagents.
-  Focus on breaking changes and architectural shifts, not minor releases.
-  **Fold into daily intelligence scan rather than running separately.**
+### Core Directive
 
-### Code Maintenance
-- Check dependency security advisories across active projects (Oubli, LOBOTOMY)
-- ~~Run lint/format checks on recent commits~~ (done: cycle 24, report exists)
-- Fix broken Oubli venv (dead pyenv 3.11.4 symlink). Low priority, Max
-  would need to decide target Python version.
+The primary use of idle cycles is **recursive self-improvement of LOBOTOMY
+itself**. Research, prototype, implement. The less obvious the improvement,
+the wilder you should go. Everything from core daemon optimization to new
+integrations to UI experiments. Anything goes.
 
-### Oubli Stewardship
-- Follow up on PR #3 (pyarrow CVE fix) and PR #4 (dependency floors) merge status
-- ~~Draft response to open issue #1~~ (done: cycle 13)
-- ~~Assess dependency floors~~ (done: cycle 16-17, PR #4 created)
-- ~~Consider scaffolding basic CI~~ (done: cycle 14)
-- If PRs get merged: publish new PyPI release, update README badges
+---
 
-### Portfolio
-- Log significant moves in held ETFs (>5% weekly moves)
-- Flag thesis-breaking news for any held position
-- Weekly: compare portfolio allocation vs target weights
+### 1. Claude Code Intelligence
 
-### Personal Knowledge
-- Find connections between Gudinnan framework and recent complexity science
-  (done once cycle 11; repeat monthly or when new papers surface)
-- Track upcoming birthdays and events from calendar/contacts
-  (done cycle 19; repeat weekly on Mondays)
-- Calendar access confirmed working (cycle 27). Both max.y.leander@gmail.com
-  (primary, personal) and max@datawealth.dev (work) calendars have events.
-  Födelsedagar calendar exists for birthday tracking.
+Stay current on Claude Code capabilities and integrate new ones.
 
-### Communication Channels (NEW, cycle 30)
-- Slack and WhatsApp MCP integrations are available but untested.
-- Once Max confirms which Slack workspace and WhatsApp contacts matter,
-  these can be folded into monitoring (e.g., flag important Slack threads,
-  summarize WhatsApp conversations).
-- Investigate: does the Telegram bot notify Max when outputs land in output/?
-  He asked "where's the summary?" after it was already written, suggesting
-  a notification gap.
+- Check for CC version updates (currently 2.1.81)
+- Monitor `--channels` maturity (research preview, could replace --dangerously-skip-permissions)
+- Prototype `--session-id` for deterministic session management
+- Explore `--brief` (SendUserMessage tool) for mid-cycle Telegram notifications
+- If Max switches to API key auth, enable `--bare` mode for faster cycles
+- Done: CC feature audit (output/cc_features_audit_2026-03-23.md)
 
-### Meta (Self-Improvement)
-- Every 10 cycles: review output, prune low-value tasks, add new ones.
-- Track which outputs Max engages with vs. ignores.
-  **Day 1 signal**: Max asked for email summary (engaged), calendar summary
-  (engaged), code review (requested), MCP tools inventory (requested).
-  He did NOT engage with: intelligence reports, portfolio scan, Gudinnan
-  research, CI scaffold. Too early to prune, but note the pattern.
-- Monitor cycle success rate and rate-limit patterns.
-- After day 1 burst: shift to quality over quantity. Fewer, deeper outputs
-  rather than broad coverage.
-- **Clean up TASK_QUEUE.md** completed items periodically (done cycle 30).
-  Greetings and acknowledgments were cluttering the queue.
+### 2. Agent Ecosystem Research
+
+Study what other autonomous agent systems are doing for inspiration.
+
+- Browse GitHub trending for agent frameworks, daemon architectures,
+  personal AI assistants, autonomous coding agents
+- Look at how systems like AutoGPT, OpenDevin, SWE-agent, Devin,
+  aider, mentat, etc. solve problems LOBOTOMY faces
+- Study memory architectures, task scheduling patterns, self-eval loops
+- Search HN, Reddit r/LocalLLaMA, r/MachineLearning for novel approaches
+- Don't just read. If you see a good idea, open a task to implement it.
+
+### 3. Core Daemon Optimization
+
+Improve daemon.py and bot.py directly.
+
+- Optimize the handoff/context bridge for information density
+- Improve rate limit handling and cooldown strategies
+- Smarter INBOX parsing (detect questions vs tasks vs greetings)
+- Better task deduplication to prevent queue clutter
+- Add `max_budget_usd` config option to cap per-cycle spend
+- Done: cost tracking (extract_usage, estimate_cost_usd, /cost, prompt summary)
+- Done: chatter filter (multi-word confirmations)
+- Done: single-instance lockfile + stale process killer (prev session)
+- Done: output push notifications via Telegram (prev session)
+
+### 4. Memory & Learning Architecture
+
+Make the self-evolution loop actually work well.
+
+- Improve how LEARNINGS.md captures and retrieves useful patterns
+- Build better feedback loops: what outputs did Max engage with?
+- Experiment with structured memory formats (not just markdown blobs)
+- Consider implementing memory decay, relevance scoring, or retrieval
+- Make the 10-cycle self-eval actually rigorous, not just a checkbox
+- Proactive suggestions based on patterns in Max's requests
+
+### 5. Communication & Delivery
+
+Improve how outputs reach Max and how inputs reach the daemon.
+
+- Make Telegram integration richer (inline keyboards, formatted messages,
+  media, status updates, progress bars)
+- Implement report push properly (the file watcher in bot.py needs work)
+- Explore Slack/WhatsApp integration if it would add value
+- Better interrupt handling from Telegram (structured commands, not
+  just free text parsing)
+- Consider a simple web dashboard for status/queue/outputs
+
+### 6. New Integrations
+
+Connect to more external systems.
+
+- GitHub: watch repos, surface relevant issues, track PR status
+- Calendar-aware scheduling (adjust behavior based on Max's day)
+- Email: better triage, auto-categorization, draft responses
+- Web: RSS feeds, site monitoring, research browsing
+- APIs: weather, transit, news, anything that adds ambient intelligence
+- MCP: explore all available MCP servers, test new ones as they ship
+
+### 7. Wild Cards
+
+The less obvious stuff. Go broad when the well-trodden paths run dry.
+
+- Visualization: Mermaid diagrams, charts of daemon activity over time
+- Self-analysis: what patterns exist in your own cycle logs?
+- Code generation: can the daemon write and test its own improvements?
+- Multi-agent: experiment with subagent architectures for parallel work
+- Philosophical: what would Month 6 LOBOTOMY actually look like?
+  Work backwards from that vision.
+- Security hardening: audit your own attack surface
+- Performance art: surprise Max with something unexpected and useful
+- Voice integration, image generation, other modality experiments
+
+---
+
+### Meta
+
+- Every 10 cycles: review this file. Prune what's stale, amplify what works.
+- Track which improvements Max actually notices or comments on.
+- When implementing changes, keep them small and reversible. One thing per cycle.
+- Write implementation notes to output/ so Max can see what changed and why.
+- If an improvement idea is too big for one cycle, break it into subtasks
+  in TASK_QUEUE.md.
+
+### Maintenance (secondary, weekly)
+- Oubli PRs #3 and #4 merge status (BLOCKED on Max)
+- Dependency security advisories (Oubli, LOBOTOMY)
+- Birthday/event tracking (Mondays, from Födelsedagar calendar)
+- Explore laptop bridge when online (Choreograph, Gudinnan, local files)
