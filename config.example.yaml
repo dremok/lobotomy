@@ -1,0 +1,31 @@
+# LOBOTOMY configuration
+# Copy to config.yaml and edit for your environment.
+
+# Cooldowns (seconds)
+base_cooldown: 300        # 5 min between cycles when tasks are queued
+urgent_cooldown: 30       # 30s when P0/P1 tasks exist
+background_cooldown: 3600 # 1 hour when only background radiation remains
+max_cooldown: 1800        # 30 min ceiling after repeated failures
+backoff_multiplier: 2     # Exponential backoff on rate limits
+
+# Session limits
+session_timeout: 900      # 15 min max per CC session
+
+# Health checks
+health_check_hours: 24    # Run system health check once per day
+
+# Claude Code binary
+claude_command: claude
+
+# Laptop bridge (Tailscale SSH, read-only)
+laptop:
+  enabled: false
+  hostname: maxs-laptop   # Tailscale hostname
+  ssh_key: ~/.ssh/laptop_key
+  user: lobster            # Restricted read-only OS user
+
+# Telegram bot (phone steering)
+telegram:
+  enabled: false
+  token: ""               # BotFather token
+  chat_id: ""             # Your Telegram user ID (for auth)

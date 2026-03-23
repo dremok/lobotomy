@@ -1,0 +1,20 @@
+[Unit]
+Description=LOBOTOMY daemon (autonomous Claude Code loop)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=max
+WorkingDirectory=/home/max/lobotomy
+ExecStart=/usr/bin/python3 /home/max/lobotomy/daemon.py
+Restart=always
+RestartSec=60
+Environment="PATH=/home/max/.local/bin:/usr/bin:/bin"
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/max
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
