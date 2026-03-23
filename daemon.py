@@ -820,25 +820,33 @@ def main():
             name="lobotomy-daemon",
         )
 
-        # If --resume failed or timed out, retry as fresh session
+        # If --resume failed, retry as fresh session. Skip retry for
+        # timeouts on background work (no urgent tasks) to avoid wasting
+        # another 900s on work that will likely timeout again.
         if resuming and result["status"] in ("error", "timeout"):
-            log.warning("Resumed session failed. Retrying fresh.")
-            daemon_session_id = None
-            session_file.unlink(missing_ok=True)
-            prompt = build_prompt(cycle_id, laptop, laptop_config=laptop_cfg, continued=False)
-            result = run_cc(
-                prompt,
-                str(BASE_DIR),
-                config["session_timeout"],
-                config["claude_command"],
-                resume_session_id=None,
-                cycle_id=cycle_id,
-                fallback_model=fallback,
-                effort=effort,
-                max_budget_usd=budget,
-                append_system_prompt=soul_content if soul_content else None,
-                name="lobotomy-daemon",
-            )
+            should_retry = result["status"] == "error" or has_urgent_tasks()
+            if should_retry:
+                log.warning("Resumed session failed. Retrying fresh.")
+                daemon_session_id = None
+                session_file.unlink(missing_ok=True)
+                prompt = build_prompt(cycle_id, laptop, laptop_config=laptop_cfg, continued=False)
+                result = run_cc(
+                    prompt,
+                    str(BASE_DIR),
+                    config["session_timeout"],
+                    config["claude_command"],
+                    resume_session_id=None,
+                    cycle_id=cycle_id,
+                    fallback_model=fallback,
+                    effort=effort,
+                    max_budget_usd=budget,
+                    append_system_prompt=soul_content if soul_content else None,
+                    name="lobotomy-daemon",
+                )
+            else:
+                log.warning("Resumed session timed out on background work. Skipping fresh retry.")
+                daemon_session_id = None
+                session_file.unlink(missing_ok=True)
 
         log.info(
             f"Cycle #{cycle_id}: {result['status']} "
