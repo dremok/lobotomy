@@ -11,6 +11,14 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-23)
+- [x] `email_digest` | **Scheduled email digest** | 23:02 (08:00 + 20:00 daily digest emails)
+- [x] `tg_1774306939007` | **Email task status** | 23:02 (answered: port fix done, emails working, digest P2 queued)
+- [x] `tg_1774306878834` | **BlueRock info from Oubli** | 23:01 (answered: $110/hr Upwork, AI stock prediction pipeline, Jonathan Adest, Jonas Hallgren)
+- [x] `tg_1774306799281` | **IST in Oubli?** | 22:59 (searched, nothing found. BLOCKED: needs Max to provide IST details to save)
+- [x] `tg_1774306744227` | **IST job process question** | 22:59 (no data found in Oubli or daemon files)
+- [x] `tg_1774306691295` | **Oubli status check** | 22:58 (yes, working: 160 memories, 5 levels, MCP tools available)
+- [x] `tg_1774306569353` | **Fix email delivery** | 22:56 (port 465 blocked, switched to 587 STARTTLS)
+- [x] `tg_1774306463527` | **Future plans roadmap** | 22:54 (wrote output/roadmap_2026-03-23.md)
 - [x] `sched_morning` | **Morning Brief (Mon, late)** | 11:58
 - [x] `tg_batch` | **Batch pipeline status check** | 12:01
 - [x] `tg_background` | **Background activity summary** | 12:15

@@ -743,6 +743,70 @@ async def check_daemon_health(context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+async def send_digest_email(context: ContextTypes.DEFAULT_TYPE):
+    """Send a digest email summarizing today's daemon activity. Runs at 08:00 and 20:00."""
+    if not EMAIL_CONFIG or not EMAIL_CONFIG.get("enabled"):
+        return
+
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
+    if not log_path.exists():
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_cycles = []
+    for line in log_path.read_text().strip().splitlines():
+        try:
+            c = json.loads(line)
+            if c.get("timestamp", "")[:10] == today:
+                today_cycles.append(c)
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    if not today_cycles:
+        return
+
+    # Stats
+    total = len(today_cycles)
+    successes = sum(1 for c in today_cycles if c["status"] == "success")
+    total_cost = sum(c.get("cost_usd", 0) for c in today_cycles)
+    avg_dur = sum(c.get("duration_seconds", 0) for c in today_cycles) / total
+
+    # Recent outputs
+    output_files = []
+    if OUTPUT_DIR.exists():
+        for f in sorted(OUTPUT_DIR.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True):
+            if today in f.name:
+                output_files.append(f.name)
+
+    # Queue state
+    queue = read_file(QUEUE_DIR / "TASK_QUEUE.md")
+    open_tasks = queue.count("- [ ]")
+    done_tasks = queue.count("- [x]")
+
+    # Handoff
+    handoff = read_file(QUEUE_DIR / "HANDOFF.md")
+
+    # Build digest
+    period = "morning" if datetime.now().hour < 14 else "evening"
+    lines = [
+        f"LOBOTOMY {period} digest — {today}",
+        f"",
+        f"Cycles: {total} ({successes} success, {total - successes} failed)",
+        f"Cost: ${total_cost:.2f} | Avg duration: {avg_dur:.0f}s",
+        f"Queue: {open_tasks} open, {done_tasks} done today",
+    ]
+    if output_files:
+        lines.append(f"")
+        lines.append(f"Outputs: {', '.join(output_files[:5])}")
+    if handoff.strip():
+        # First 3 lines of handoff for context
+        handoff_preview = "\n".join(handoff.strip().splitlines()[:5])
+        lines.append(f"")
+        lines.append(f"Last handoff:\n{handoff_preview}")
+
+    send_email(f"{period.title()} Digest", "\n".join(lines))
+
+
 async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
     """Watch for new outputs, handoff changes, restart signals, and failures."""
     global _last_handoff_mtime
@@ -874,6 +938,11 @@ def main():
 
     # Proactive: watch for daemon activity (new outputs + handoff changes)
     app.job_queue.run_repeating(poll_daemon_activity, interval=POLL_INTERVAL, first=10)
+
+    # Scheduled digest emails (08:00 and 20:00 local time)
+    from datetime import time as dt_time
+    app.job_queue.run_daily(send_digest_email, time=dt_time(hour=8, minute=0))
+    app.job_queue.run_daily(send_digest_email, time=dt_time(hour=20, minute=0))
 
     print("LOBOTOMY Telegram bot running...")
     app.run_polling()
