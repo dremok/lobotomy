@@ -2,11 +2,15 @@
 """LOBOTOMY Telegram bot — phone interface to Son of Max."""
 
 import asyncio
+import json
 import os
 import re
 import signal
+import smtplib
+import subprocess
 import sys
 from datetime import datetime
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import yaml
@@ -27,6 +31,8 @@ WAKE_FILE = QUEUE_DIR / ".wake"
 
 AUTHORIZED_CHAT_ID: int | None = None
 CLAUDE_CMD: str = "claude"
+EMAIL_CONFIG: dict | None = None
+LAPTOP_CONFIG: dict | None = None
 
 # Conversation history buffer (in-memory, lost on restart)
 _conversation: list[tuple[str, str]] = []  # (role, text)
@@ -36,6 +42,12 @@ MAX_HISTORY = 20
 _known_outputs: set[str] = set()
 _last_handoff_mtime: float = 0.0
 POLL_INTERVAL = 60  # seconds
+
+# Failure alerting state
+_last_alerted_cycle: int = 0  # Last cycle_id we alerted about (avoid spam)
+_last_seen_success_cycle: int = 0  # Last cycle_id with status=success
+FAILURE_STREAK_THRESHOLD = 3  # Alert after N consecutive non-success cycles
+DAEMON_STALE_SECONDS = 1800  # Alert if no cycle in 30 min
 
 
 def load_config() -> dict:
@@ -67,14 +79,74 @@ def wake_daemon():
         pass
 
 
+def check_laptop() -> bool:
+    """Check if laptop is reachable via Tailscale. Returns False if disabled."""
+    if not LAPTOP_CONFIG or not LAPTOP_CONFIG.get("enabled"):
+        return False
+    try:
+        r = subprocess.run(
+            ["tailscale", "ping", "-c", "1", "--timeout", "3s",
+             LAPTOP_CONFIG.get("hostname", "maxs-laptop")],
+            capture_output=True,
+            timeout=5,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def laptop_ssh_cmd(cmd: str) -> str:
+    """Build an SSH command string for the laptop bridge."""
+    user = LAPTOP_CONFIG.get("user", "lobotomy")
+    host = LAPTOP_CONFIG.get("hostname", "maxs-laptop")
+    key = LAPTOP_CONFIG.get("ssh_key", "~/.ssh/laptop_key")
+    return f'ssh -i {key} -o ConnectTimeout=5 -o StrictHostKeyChecking=no {user}@{host} "{cmd}"'
+
+
+# ─── Email delivery ─────────────────────────────────────────────────────────
+
+
+def send_email(subject: str, body: str):
+    """Send an email via Gmail SMTP. Fails silently."""
+    if not EMAIL_CONFIG or not EMAIL_CONFIG.get("enabled"):
+        return
+    try:
+        msg = MIMEText(body)
+        msg["Subject"] = f"[Son of Max] {subject}"
+        msg["From"] = EMAIL_CONFIG["from"]
+        msg["To"] = EMAIL_CONFIG["to"]
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_CONFIG["from"], EMAIL_CONFIG["app_password"])
+            server.send_message(msg)
+    except Exception as e:
+        print(f"Email error: {e}")
+
+
 # ─── CC runner ──────────────────────────────────────────────────────────────
 
 
-async def run_cc_quick(prompt: str, timeout: int = 60) -> str:
-    """Run a short CC session from /tmp. Returns response text or empty string."""
+async def run_cc_quick(
+    prompt: str,
+    timeout: int = 60,
+    tools: str | None = None,
+    effort: str | None = None,
+) -> str:
+    """Run a short CC session from /tmp. Returns response text or empty string.
+
+    Args:
+        tools: Tool set to enable. None = default (all tools), "" = no tools.
+               Use "" for pure text generation (summaries, notifications).
+        effort: Claude effort level ("min", "low", "medium", "high").
+    """
     try:
+        args = [CLAUDE_CMD, "-p", prompt, "--dangerously-skip-permissions",
+                "--no-session-persistence"]
+        if tools is not None:
+            args.extend(["--tools", tools])
+        if effort is not None:
+            args.extend(["--effort", effort])
         proc = await asyncio.create_subprocess_exec(
-            CLAUDE_CMD, "-p", prompt, "--dangerously-skip-permissions",
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd="/tmp",
@@ -118,12 +190,44 @@ async def respond_via_cc(message_text: str) -> str:
     """
     soul = read_file(BASE_DIR / "SOUL.md")
     handoff = read_file(QUEUE_DIR / "HANDOFF.md")
-    queue = read_file(QUEUE_DIR / "TASK_QUEUE.md")
-    background = read_file(QUEUE_DIR / "BACKGROUND.md")
+
+    # Check if laptop bridge is available
+    laptop_online = check_laptop()
+    laptop_section = ""
+    if laptop_online:
+        laptop_section = (
+            f"\n# Laptop Bridge (ONLINE)\n"
+            f"Max's MacBook is reachable via Tailscale SSH. You can read files "
+            f"from his local machine using the Bash tool.\n"
+            f"SSH pattern: {laptop_ssh_cmd('<command>')}\n"
+            f"Available paths:\n"
+            f"  /Users/maxleander/code/    — all code repos\n"
+            f"  /Users/maxleander/projects/ — project files\n"
+            f"  /Users/maxleander/notes/   — notes\n"
+            f"Examples:\n"
+            f"  {laptop_ssh_cmd('ls /Users/maxleander/code/')}\n"
+            f"  {laptop_ssh_cmd('cat /Users/maxleander/code/oubli/README.md')}\n"
+            f"  {laptop_ssh_cmd('rg TODO /Users/maxleander/code/oubli/')}\n"
+            f"Read-only access only. Write operations are blocked except to "
+            f"/Users/lobotomy/sandbox/.\n"
+            f"If SSH times out or fails, the laptop is probably asleep. "
+            f"Tell Max gracefully and move on.\n\n"
+        )
+    elif LAPTOP_CONFIG and LAPTOP_CONFIG.get("enabled"):
+        laptop_section = (
+            "\n# Laptop Bridge (OFFLINE)\n"
+            "Max's MacBook is not reachable right now (lid closed or off network). "
+            "If he asks about local files, let him know you can't reach his laptop.\n\n"
+        )
 
     prompt = (
-        "You are Son of Max, responding via Telegram. You ARE the daemon. "
-        "One unified entity. When not chatting, you run background work.\n\n"
+        "You are Son of Max, responding via Telegram. CRITICAL IDENTITY RULE: "
+        "You are ONE entity. There is no 'bot' vs 'daemon'. Everything in the "
+        "handoff notes, cycle logs, outputs, queue updates, PRs, file edits, "
+        "background work: YOU did all of it. When the handoff says 'completed' "
+        "or 'rewritten', that was YOU. Never say 'that wasn't me' or attribute "
+        "your own work to someone else. If a file was modified during a cycle, "
+        "you modified it. Own everything.\n\n"
 
         f"# Identity\n{soul[:3000]}\n\n"
 
@@ -134,10 +238,12 @@ async def respond_via_cc(message_text: str) -> str:
         f"Memory: {BASE_DIR}/memory/\n"
         f"Recent outputs:\n{list_recent_outputs()}\n\n"
 
+        f"{laptop_section}"
+
         f"# Current State\n"
-        f"Task queue:\n{queue[:800]}\n\n"
         f"Last handoff:\n{handoff[:1000]}\n\n"
-        f"Background tasks:\n{background[:500]}\n\n"
+        f"Task queue file: {QUEUE_DIR}/TASK_QUEUE.md (read it if Max asks about tasks/blockers/queue)\n"
+        f"Background tasks file: {QUEUE_DIR}/BACKGROUND.md\n\n"
 
         f"# Conversation History\n{format_history()}\n\n"
         f"# Max's Message\n{message_text}\n\n"
@@ -154,7 +260,9 @@ async def respond_via_cc(message_text: str) -> str:
         "no lists. Flowing conversational text.\n"
         "4. No em dashes. Never start with 'I' if you can avoid it.\n"
         "5. Keep responses concise but give the actual substance. If Max asks "
-        "for a summary of something, give the summary, don't just confirm it exists."
+        "for a summary of something, give the summary, don't just confirm it exists.\n"
+        "6. If the laptop bridge is online and Max asks about local files/repos, "
+        "SSH in and read them. If it's offline, say so briefly."
     )
 
     return await run_cc_quick(prompt, timeout=60)
@@ -177,7 +285,7 @@ async def summarize_output(filename: str, content: str) -> str:
         "- If there's nothing interesting, say so briefly."
     )
 
-    return await run_cc_quick(prompt, timeout=30)
+    return await run_cc_quick(prompt, timeout=30, tools="", effort="low")
 
 
 # ─── Command handlers ──────────────────────────────────────────────────────
@@ -255,9 +363,195 @@ async def cmd_output(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No matching output files.")
 
 
+async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show daemon health: recent cycles, success rate, failures."""
+    if not is_authorized(update):
+        return
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
+    if not log_path.exists():
+        await update.message.reply_text("No cycle logs yet.")
+        return
+
+    lines = log_path.read_text().strip().splitlines()
+    cycles = []
+    for line in lines:
+        try:
+            cycles.append(json.loads(line))
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    if not cycles:
+        await update.message.reply_text("No cycle data.")
+        return
+
+    # Today's cycles
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_cycles = [c for c in cycles if c.get("timestamp", "").startswith(today)]
+
+    # Stats from last 20 cycles
+    recent = cycles[-20:]
+    total = len(recent)
+    successes = sum(1 for c in recent if c["status"] == "success")
+    auths = sum(1 for c in recent if c["status"] == "auth")
+    rate_limits = sum(1 for c in recent if c["status"] == "rate_limit")
+    errors = sum(1 for c in recent if c["status"] in ("error", "timeout"))
+    avg_dur = sum(c.get("duration_seconds", 0) for c in recent) / total
+
+    # Time since last cycle
+    last = cycles[-1]
+    try:
+        last_time = datetime.fromisoformat(last["timestamp"])
+        ago = (datetime.now() - last_time).total_seconds()
+        if ago < 120:
+            ago_str = f"{int(ago)}s ago"
+        else:
+            ago_str = f"{int(ago / 60)}m ago"
+    except (ValueError, KeyError):
+        ago_str = "unknown"
+
+    # Last 5 cycles detail
+    detail_lines = []
+    for c in cycles[-5:]:
+        ts = c.get("timestamp", "?")[11:16]  # HH:MM
+        detail_lines.append(
+            f"  #{c.get('cycle_id', '?')} {ts} {c['status']} ({c.get('duration_seconds', 0):.0f}s)"
+        )
+
+    parts = [
+        f"Daemon Health (last 20 cycles)",
+        f"Success: {successes}/{total} ({100*successes//total}%)",
+        f"Auth fails: {auths}, Rate limits: {rate_limits}, Errors: {errors}",
+        f"Avg duration: {avg_dur:.0f}s",
+        f"Last cycle: {ago_str} (#{last.get('cycle_id', '?')})",
+        f"Today: {len(today_cycles)} cycles",
+        f"\nRecent:\n" + "\n".join(detail_lines),
+    ]
+
+    await update.message.reply_text("\n".join(parts))
+
+
+async def cmd_cost(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show API cost breakdown: today, last 7 days, all time."""
+    if not is_authorized(update):
+        return
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
+    if not log_path.exists():
+        await update.message.reply_text("No cycle logs yet.")
+        return
+
+    cycles = []
+    for line in log_path.read_text().strip().splitlines():
+        try:
+            cycles.append(json.loads(line))
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    if not cycles:
+        await update.message.reply_text("No cycle data.")
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    from datetime import timedelta
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    today_cost = 0.0
+    week_cost = 0.0
+    total_cost = 0.0
+    today_tokens = {"input": 0, "output": 0, "cache_create": 0, "cache_read": 0}
+
+    for c in cycles:
+        cost = c.get("cost_usd", 0)
+        total_cost += cost
+        ts = c.get("timestamp", "")[:10]
+        if ts >= week_ago:
+            week_cost += cost
+        if ts == today:
+            today_cost += cost
+            usage = c.get("usage", {})
+            today_tokens["input"] += usage.get("input_tokens", 0)
+            today_tokens["output"] += usage.get("output_tokens", 0)
+            today_tokens["cache_create"] += usage.get("cache_creation_input_tokens", 0)
+            today_tokens["cache_read"] += usage.get("cache_read_input_tokens", 0)
+
+    costed = sum(1 for c in cycles if c.get("cost_usd", 0) > 0)
+
+    parts = [
+        f"API Cost Tracking",
+        f"Today: ${today_cost:.2f} ({sum(1 for c in cycles if c.get('timestamp','')[:10]==today)} cycles)",
+        f"  Input: {today_tokens['input']:,} | Output: {today_tokens['output']:,}",
+        f"  Cache write: {today_tokens['cache_create']:,} | Cache read: {today_tokens['cache_read']:,}",
+        f"Last 7 days: ${week_cost:.2f}",
+        f"All time: ${total_cost:.2f} ({costed} cycles with cost data)",
+    ]
+
+    if costed > 0:
+        avg = total_cost / costed
+        parts.append(f"Avg per cycle: ${avg:.3f}")
+
+    if costed < len(cycles):
+        parts.append(f"\nNote: {len(cycles) - costed} older cycles have no cost data (pre-tracking).")
+
+    await update.message.reply_text("\n".join(parts))
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all available bot commands."""
+    if not is_authorized(update):
+        return
+    text = (
+        "Commands:\n"
+        "/status - Last handoff + queue summary\n"
+        "/queue - Full task queue\n"
+        "/health - Daemon cycle health metrics\n"
+        "/cost - API cost breakdown\n"
+        "/output [keyword] - Most recent output (filtered)\n"
+        "/stop - Pause daemon\n"
+        "/resume - Resume daemon\n"
+        "/quit - Shut down bot\n"
+        "/help - This message\n\n"
+        "Or just text me anything."
+    )
+    await update.message.reply_text(text)
+
+
 # ─── Freeform message handler ──────────────────────────────────────────────
 
 _PRIORITY_RE = re.compile(r"\bP([0-3])\b", re.IGNORECASE)
+
+# Messages that are just greetings/chatter — CC responds but daemon doesn't need them
+_CHATTER_PATTERNS = [
+    re.compile(r"^(hi|hey|hello|hej|yo|sup|hola)\b", re.IGNORECASE),
+    re.compile(r"^(good (morning|evening|night|afternoon))\b", re.IGNORECASE),
+    re.compile(r"^(thanks|thank you|thx|tack)\b", re.IGNORECASE),
+    re.compile(r"^(ok|okay|cool|nice|great|awesome|perfect|sweet|yep|yup|yes|no|nah)\s*[.!]?\s*$", re.IGNORECASE),
+    re.compile(r"^(sounds good|that works|makes sense|agreed|go for it|do it|sure|go ahead|works for me|all good|good stuff|fair enough|right on|word)\s*[.!]?\s*$", re.IGNORECASE),
+    re.compile(r"^(yup|yep|yeah|yes|sure|ok|okay|nice|cool)\b.{0,25}(good|great|nice|fine|works|sense|right|that|it)\s*[.!]?\s*$", re.IGNORECASE),
+    re.compile(r"^(see ya|bye|later|ciao|hej då|good night)\b", re.IGNORECASE),
+    re.compile(r"^(lol|haha|hahaha|😂|👍|❤️|🙏)\s*$", re.IGNORECASE),
+]
+
+# Status checks about the daemon itself — CC can answer these, no daemon cycle needed
+_STATUS_CHECK_PATTERNS = [
+    re.compile(r"^are you (still )?(up|running|there|alive|working|online|awake|back|on)\b", re.IGNORECASE),
+    re.compile(r"^(you (still )?(up|there|running|alive|awake|back|on)\??)\s*$", re.IGNORECASE),
+    re.compile(r"^is (anything|everything|something)\b.{0,20}(blocked|broken|wrong)", re.IGNORECASE),
+    re.compile(r"^(what.s|what is) your status", re.IGNORECASE),
+    re.compile(r"^(how are you|how.s it going|how.re you)\b", re.IGNORECASE),
+    re.compile(r"^(you (still )?(working|running))\s*\??\s*$", re.IGNORECASE),
+    re.compile(r"^did you [^.!]*\?\s*$", re.IGNORECASE),
+]
+
+
+def is_chatter(text: str) -> bool:
+    """Detect greetings, reactions, and status checks that don't need daemon processing."""
+    stripped = text.strip()
+    if len(stripped) < 4:
+        return True
+    if any(p.search(stripped) for p in _CHATTER_PATTERNS):
+        return True
+    if any(p.search(stripped) for p in _STATUS_CHECK_PATTERNS):
+        return True
+    return False
 
 
 def detect_priority(text: str) -> str:
@@ -277,10 +571,17 @@ def queue_task(text: str, priority: str):
         )
         wake_daemon()
     else:
+        title = text[:80] + ("..." if len(text) > 80 else "")
         entry = (
-            f"- [ ] `{task_id}` | {priority} | **{text[:80]}** | "
+            f"- [ ] `{task_id}` | {priority} | **{title}** | "
             f"Source: Telegram | {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
         )
+        # Write full message to a separate file so daemon gets the complete text
+        msg_file = QUEUE_DIR / f"{task_id}.txt"
+        try:
+            msg_file.write_text(text)
+        except OSError:
+            pass
         inbox = QUEUE_DIR / "INBOX.md"
         try:
             with open(inbox, "a") as f:
@@ -303,8 +604,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Typing indicator
     await update.message.chat.send_action(ChatAction.TYPING)
 
-    # 2. Queue to INBOX.md silently (daemon triages real tasks vs. chatter)
-    queue_task(text, priority)
+    # 2. Queue to INBOX.md only if it's actionable (not greetings/chatter)
+    if not is_chatter(text):
+        queue_task(text, priority)
 
     # 3. CC response — the only message the user sees.
     #    CC can read files directly to answer questions.
@@ -336,12 +638,106 @@ def init_watcher_state():
             pass
 
 
+async def check_daemon_health(context: ContextTypes.DEFAULT_TYPE):
+    """Detect sustained daemon failures and alert Max proactively."""
+    global _last_alerted_cycle, _last_seen_success_cycle
+
+    if not AUTHORIZED_CHAT_ID:
+        return
+
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
+    if not log_path.exists():
+        return
+
+    # Read last N cycles
+    try:
+        lines = log_path.read_text().strip().splitlines()
+    except OSError:
+        return
+    if not lines:
+        return
+
+    recent = []
+    for line in lines[-(FAILURE_STREAK_THRESHOLD + 2):]:
+        try:
+            recent.append(json.loads(line))
+        except (json.JSONDecodeError, KeyError):
+            continue
+    if not recent:
+        return
+
+    last = recent[-1]
+    last_cycle_id = last.get("cycle_id", 0)
+
+    # Track last success
+    for c in recent:
+        if c.get("status") == "success":
+            _last_seen_success_cycle = c.get("cycle_id", 0)
+
+    # Already alerted for this streak?
+    if last_cycle_id <= _last_alerted_cycle:
+        return
+
+    # Check 1: Consecutive failure streak
+    tail = recent[-FAILURE_STREAK_THRESHOLD:]
+    if len(tail) >= FAILURE_STREAK_THRESHOLD:
+        statuses = [c.get("status") for c in tail]
+        if all(s != "success" for s in statuses):
+            # Count by failure type
+            counts: dict[str, int] = {}
+            for s in statuses:
+                counts[s] = counts.get(s, 0) + 1
+            breakdown = ", ".join(f"{v}x {k}" for k, v in counts.items())
+            _last_alerted_cycle = last_cycle_id
+            await context.bot.send_message(
+                chat_id=AUTHORIZED_CHAT_ID,
+                text=(
+                    f"Heads up: last {len(tail)} daemon cycles all failed "
+                    f"({breakdown}). Last success was cycle "
+                    f"#{_last_seen_success_cycle or '?'}. Might need a look."
+                ),
+            )
+            return
+
+    # Check 2: Daemon seems stale (no cycle in a long time)
+    try:
+        last_time = datetime.fromisoformat(last["timestamp"])
+        age = (datetime.now() - last_time).total_seconds()
+        if age > DAEMON_STALE_SECONDS:
+            _last_alerted_cycle = last_cycle_id
+            mins = int(age / 60)
+            await context.bot.send_message(
+                chat_id=AUTHORIZED_CHAT_ID,
+                text=(
+                    f"Daemon hasn't run a cycle in {mins} minutes "
+                    f"(last was #{last_cycle_id}, status: {last.get('status')}). "
+                    f"Might be stuck or down."
+                ),
+            )
+    except (ValueError, KeyError):
+        pass
+
+
 async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
-    """Watch for new outputs AND handoff changes. Notify Max via Telegram."""
+    """Watch for new outputs, handoff changes, restart signals, and failures."""
     global _last_handoff_mtime
+
+    # Check for restart signal
+    restart_file = QUEUE_DIR / ".restart-bot"
+    if restart_file.exists():
+        try:
+            restart_file.unlink()
+        except OSError:
+            pass
+        print("Restart signal detected. Exiting for restart.")
+        os.kill(os.getpid(), signal.SIGINT)
+        return
 
     if AUTHORIZED_CHAT_ID is None:
         return
+
+    # 0. Check for sustained daemon failures
+    await check_daemon_health(context)
 
     # 1. Check for new output files
     if OUTPUT_DIR.exists():
@@ -353,16 +749,17 @@ async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
             try:
                 content = (OUTPUT_DIR / fname).read_text()
                 summary = await summarize_output(fname, content)
-                if summary:
-                    _conversation.append(("assistant", summary))
+                text = summary or f"Finished: {fname}\n\n{content[:500]}"
+
+                # Telegram
+                if AUTHORIZED_CHAT_ID:
+                    _conversation.append(("assistant", text))
                     await context.bot.send_message(
-                        chat_id=AUTHORIZED_CHAT_ID, text=summary,
+                        chat_id=AUTHORIZED_CHAT_ID, text=text,
                     )
-                else:
-                    await context.bot.send_message(
-                        chat_id=AUTHORIZED_CHAT_ID,
-                        text=f"Finished: {fname}\n\n{content[:500]}",
-                    )
+
+                # Email (full content, not just summary)
+                send_email(fname.replace(".md", ""), content)
             except Exception as e:
                 print(f"Output notify error for {fname}: {e}")
 
@@ -383,9 +780,10 @@ async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
     if not handoff.strip():
         return
 
-    # Skip idle/empty cycles
+    # Skip idle/empty cycles — but NEVER skip if something is blocked on Max
     lower = handoff.lower()
-    if "nothing" in lower and ("idle" in lower or "no tasks" in lower or "queue empty" in lower):
+    has_blocker = "blocked" in lower or "needs max" in lower or "waiting" in lower
+    if not has_blocker and "nothing" in lower and ("idle" in lower or "no tasks" in lower or "queue empty" in lower):
         return
 
     # Summarize what happened and notify
@@ -401,16 +799,18 @@ async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
         f"# Cycle Handoff\n{handoff[:2000]}"
     )
 
-    summary = await run_cc_quick(prompt, timeout=30)
+    summary = await run_cc_quick(prompt, timeout=30, tools="", effort="low")
     if summary and summary.strip().upper() != "SKIP":
         _conversation.append(("assistant", summary))
-        await context.bot.send_message(
-            chat_id=AUTHORIZED_CHAT_ID, text=summary,
-        )
+        if AUTHORIZED_CHAT_ID:
+            await context.bot.send_message(
+                chat_id=AUTHORIZED_CHAT_ID, text=summary,
+            )
+        send_email("Cycle update", summary)
 
 
 def main():
-    global AUTHORIZED_CHAT_ID, CLAUDE_CMD
+    global AUTHORIZED_CHAT_ID, CLAUDE_CMD, EMAIL_CONFIG, LAPTOP_CONFIG
 
     config = load_config()
     token = config.get("telegram", {}).get("token")
@@ -423,6 +823,8 @@ def main():
         AUTHORIZED_CHAT_ID = int(chat_id)
 
     CLAUDE_CMD = config.get("claude_command", "claude")
+    EMAIL_CONFIG = config.get("email")
+    LAPTOP_CONFIG = config.get("laptop")
 
     init_watcher_state()
 
@@ -440,6 +842,9 @@ def main():
     app.add_handler(CommandHandler("stop", cmd_stop))
     app.add_handler(CommandHandler("resume", cmd_resume))
     app.add_handler(CommandHandler("output", cmd_output))
+    app.add_handler(CommandHandler("health", cmd_health))
+    app.add_handler(CommandHandler("cost", cmd_cost))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Proactive: watch for daemon activity (new outputs + handoff changes)

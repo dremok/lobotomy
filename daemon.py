@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """LOBOTOMY daemon — orchestrator loop for autonomous Claude Code sessions."""
 
+import fcntl
 import json
 import logging
+import os
 import re
 import signal
 import subprocess
@@ -17,6 +19,7 @@ import yaml
 BASE_DIR = Path(__file__).parent.resolve()
 QUEUE_DIR = BASE_DIR / "queue"
 WAKE_FILE = QUEUE_DIR / ".wake"
+PID_FILE = BASE_DIR / "logs" / "daemon.pid"
 
 # Patterns for detecting issues in CC output
 AUTH_ERRORS = [
@@ -31,6 +34,14 @@ RATE_LIMITS = [
     "rate_limit_error",
     "throttled",
 ]
+
+# Claude Opus 4.6 pricing (USD per million tokens)
+TOKEN_PRICING = {
+    "input": 15.0,
+    "output": 75.0,
+    "cache_creation": 18.75,
+    "cache_read": 1.50,
+}
 
 # Track active subprocess for clean shutdown
 _active_process: subprocess.Popen | None = None
@@ -57,7 +68,7 @@ def load_config() -> dict:
         "session_timeout": 900,
         "health_check_hours": 24,
         "claude_command": "claude",
-        "laptop": {"enabled": False, "hostname": "maxs-laptop"},
+        "laptop": {"enabled": False, "hostname": "maxs-laptop", "user": "lobotomy", "ssh_key": "~/.ssh/laptop_key"},
         "telegram": {"enabled": False, "token": "", "chat_id": ""},
     }
     cfg = BASE_DIR / "config.yaml"
@@ -89,6 +100,87 @@ def detect_issue(output: str, check_rate_limit: bool = True) -> str | None:
     return None
 
 
+def extract_usage(output_lines: list[str]) -> dict:
+    """Sum token usage across all assistant message events in the stream."""
+    totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    }
+    for line in output_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+            usage = event.get("message", {}).get("usage")
+            if not usage:
+                continue
+            for key in totals:
+                totals[key] += usage.get(key, 0)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+    return totals
+
+
+def estimate_cost_usd(usage: dict) -> float:
+    """Estimate cost in USD from token usage dict."""
+    cost = 0.0
+    cost += usage.get("input_tokens", 0) * TOKEN_PRICING["input"] / 1_000_000
+    cost += usage.get("output_tokens", 0) * TOKEN_PRICING["output"] / 1_000_000
+    cost += usage.get("cache_creation_input_tokens", 0) * TOKEN_PRICING["cache_creation"] / 1_000_000
+    cost += usage.get("cache_read_input_tokens", 0) * TOKEN_PRICING["cache_read"] / 1_000_000
+    return cost
+
+
+def detect_auth_from_events(output_lines: list[str]) -> bool:
+    """Check for auth errors only in system-level output, not agent text.
+
+    The old approach scanned the entire raw output for auth error strings,
+    which caused false positives when the agent *discussed* auth errors in
+    its response (e.g., "I fixed the authentication_error"). This version
+    only checks:
+    - Non-JSON lines (raw CLI errors, stderr)
+    - JSON events that are NOT assistant content (system, result with is_error)
+    """
+    # Event types whose text content should be ignored for auth detection.
+    # "assistant" and content_block_* contain the agent's own words.
+    # "user" events contain tool results (file contents, command output) which
+    # can reference auth errors without meaning one actually occurred.
+    # "result" events contain the agent's final response text (unless is_error).
+    # "rate_limit_event" is informational, not an auth signal.
+    skip_types = {
+        "assistant", "content_block_delta", "content_block_start", "content_block_stop",
+        "user", "rate_limit_event",
+    }
+
+    for line in output_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+            evt_type = event.get("type")
+            # Skip agent content and informational events
+            if evt_type in skip_types:
+                continue
+            # Result events: only check if is_error (real API error).
+            # Non-error results contain the agent's own text.
+            if evt_type == "result" and not event.get("is_error"):
+                continue
+            check_str = stripped.lower()
+        except (json.JSONDecodeError, ValueError):
+            # Non-JSON line (raw CLI output) — always check
+            check_str = stripped.lower()
+
+        for p in AUTH_ERRORS:
+            if p in check_str:
+                return True
+
+    return False
+
+
 def run_cc(
     prompt: str,
     workdir: str,
@@ -96,6 +188,12 @@ def run_cc(
     cmd: str = "claude",
     resume_session_id: str | None = None,
     cycle_id: int | None = None,
+    fallback_model: str | None = None,
+    effort: str | None = None,
+    tools: str | None = None,
+    max_budget_usd: float | None = None,
+    append_system_prompt: str | None = None,
+    name: str | None = None,
 ) -> dict:
     """Run a claude -p session. Streams output to logs/cycle_<id>.jsonl in real time.
 
@@ -110,6 +208,18 @@ def run_cc(
         args.extend(["--resume", resume_session_id])
     args.extend(["-p", prompt, "--dangerously-skip-permissions",
                  "--output-format", "stream-json", "--verbose"])
+    if fallback_model:
+        args.extend(["--fallback-model", fallback_model])
+    if effort:
+        args.extend(["--effort", effort])
+    if tools is not None:
+        args.extend(["--tools", tools])
+    if max_budget_usd is not None:
+        args.extend(["--max-budget-usd", str(max_budget_usd)])
+    if append_system_prompt:
+        args.extend(["--append-system-prompt", append_system_prompt])
+    if name:
+        args.extend(["--name", name])
 
     # Per-cycle log file: logs/2026-03-20/cycle_042_1200.log
     log_path = None
@@ -133,6 +243,13 @@ def run_cc(
         # Stream output to log file in a reader thread
         output_lines: list[str] = []
         log_f = open(log_path, "w") if log_path else None
+        auth_detected = threading.Event()
+
+        # Event types containing agent/tool text (not system errors)
+        _skip_types = {
+            "assistant", "content_block_delta", "content_block_start",
+            "content_block_stop", "user", "rate_limit_event",
+        }
 
         def reader():
             for line in proc.stdout:
@@ -140,26 +257,61 @@ def run_cc(
                 if log_f:
                     log_f.write(line)
                     log_f.flush()
+                # Real-time auth error detection in stream
+                if auth_detected.is_set():
+                    continue
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                check_str = None
+                try:
+                    event = json.loads(stripped)
+                    evt_type = event.get("type")
+                    if evt_type not in _skip_types:
+                        if not (evt_type == "result" and not event.get("is_error")):
+                            check_str = stripped.lower()
+                except (json.JSONDecodeError, ValueError):
+                    check_str = stripped.lower()
+                if check_str:
+                    for p in AUTH_ERRORS:
+                        if p in check_str:
+                            auth_detected.set()
+                            break
 
         t = threading.Thread(target=reader, daemon=True)
         t.start()
 
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-            t.join(timeout=5)
-            _active_process = None
-            if log_f:
-                log_f.write("\n=== TIMEOUT ===\n")
-                log_f.close()
-            return {"status": "timeout", "output": "", "duration": time.time() - start}
+        # Wait for process, with early termination on auth errors
+        timed_out = False
+        deadline = time.time() + timeout
+        while proc.poll() is None:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                timed_out = True
+                proc.kill()
+                proc.wait()
+                break
+            if auth_detected.wait(timeout=min(5, remaining)):
+                # Auth error in stream — kill early instead of waiting
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                break
 
         t.join(timeout=10)
         _active_process = None
         if log_f:
+            if timed_out:
+                log_f.write("\n=== TIMEOUT ===\n")
+            elif auth_detected.is_set():
+                log_f.write("\n=== EARLY AUTH TERMINATION ===\n")
             log_f.close()
+
+        if timed_out:
+            return {"status": "timeout", "output": "", "duration": time.time() - start}
 
         dur = time.time() - start
         raw = "".join(output_lines)
@@ -180,12 +332,10 @@ def run_cc(
             except (json.JSONDecodeError, KeyError):
                 continue
 
-        # Check for auth errors in raw output (rate limits are checked
-        # via the result event, not string matching, since stream-json
-        # always includes an informational rate_limit_event)
-        issue = detect_issue(raw, check_rate_limit=False)
-        if issue:
-            return {"status": issue, "output": raw, "duration": dur}
+        # Check for auth errors in system-level output only (not agent text,
+        # which can discuss auth errors without meaning one actually occurred)
+        if detect_auth_from_events(output_lines):
+            return {"status": "auth", "output": raw, "duration": dur}
 
         # Check for actual rate limit via result event
         for line in reversed(output_lines):
@@ -215,8 +365,10 @@ def run_cc(
             except (json.JSONDecodeError, KeyError):
                 continue
 
+        usage = extract_usage(output_lines)
         return {"status": "success", "output": result_text, "duration": dur,
-                "session_id": session_id}
+                "session_id": session_id, "usage": usage,
+                "cost_usd": estimate_cost_usd(usage)}
     except Exception:
         _active_process = None
         return {"status": "error", "output": "", "duration": time.time() - start}
@@ -232,17 +384,41 @@ def recent_cycles(n: int = 5) -> str:
     for line in lines[-n:]:
         try:
             c = json.loads(line)
+            cost_str = f", ${c['cost_usd']:.3f}" if "cost_usd" in c else ""
             entries.append(
-                f"  #{c['cycle_id']} {c['timestamp']} — {c['status']} ({c['duration_seconds']}s)"
+                f"  #{c['cycle_id']} {c['timestamp']} — {c['status']} ({c['duration_seconds']}s{cost_str})"
             )
         except (json.JSONDecodeError, KeyError):
             continue
     return "\n".join(entries) if entries else "(no previous cycles)"
 
 
+def cost_summary() -> str:
+    """One-line cost summary for the cycle prompt."""
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
+    if not log_path.exists():
+        return ""
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_cost = 0.0
+    total_cost = 0.0
+    for line in log_path.read_text().strip().splitlines():
+        try:
+            c = json.loads(line)
+            cost = c.get("cost_usd", 0)
+            total_cost += cost
+            if c.get("timestamp", "")[:10] == today:
+                today_cost += cost
+        except (json.JSONDecodeError, KeyError):
+            continue
+    if total_cost == 0:
+        return ""
+    return f"COST: ${today_cost:.2f} today, ${total_cost:.2f} all time"
+
+
 def build_prompt(
     cycle_id: int,
     laptop_online: bool | None = None,
+    laptop_config: dict | None = None,
     continued: bool = False,
 ) -> str:
     """Build the cycle prompt passed to claude -p."""
@@ -254,11 +430,12 @@ def build_prompt(
     if continued:
         lines.append(
             "SESSION: continued (you have context from previous cycles; "
-            "re-read queue files for external changes, skip re-reading SOUL.md)"
+            "re-read queue files for external changes)"
         )
     else:
         lines.append(
-            "SESSION: fresh (no prior context; read SOUL.md and all files)"
+            "SESSION: fresh (no prior context; SOUL.md is in your system "
+            "prompt, read CLAUDE.md and all queue files)"
         )
     interrupt_content = read_file(QUEUE_DIR / "INTERRUPT.md")
     if interrupt_content.strip() and "PAUSE" not in interrupt_content.upper():
@@ -267,7 +444,22 @@ def build_prompt(
     if inbox_content.strip():
         lines.append("INBOX: New tasks in queue/INBOX.md — integrate into queue.")
     if laptop_online is not None:
-        lines.append(f"LAPTOP: {'online' if laptop_online else 'offline'}")
+        if laptop_online and laptop_config:
+            user = laptop_config.get("user", "lobotomy")
+            host = laptop_config.get("hostname", "maxs-laptop")
+            key = laptop_config.get("ssh_key", "~/.ssh/laptop_key")
+            ssh_prefix = f"ssh -i {key} -o ConnectTimeout=5 -o StrictHostKeyChecking=no {user}@{host}"
+            lines.append(
+                f"LAPTOP: online (read-only SSH via: {ssh_prefix} \"<cmd>\")\n"
+                f"  Paths: /Users/maxleander/code/, /Users/maxleander/projects/, /Users/maxleander/notes/\n"
+                f"  Allowed: cat, ls, find, head, tail, rg, grep, git log/status/diff, tree, du\n"
+                f"  If SSH fails, laptop went to sleep. Note it in HANDOFF.md."
+            )
+        else:
+            lines.append("LAPTOP: offline")
+    cost_line = cost_summary()
+    if cost_line:
+        lines.append(cost_line)
     lines.append(f"RECENT ACTIVITY:\n{recent_cycles()}")
     lines.append(
         "Execute your cycle protocol. "
@@ -303,13 +495,18 @@ def has_urgent_tasks() -> bool:
 
 
 def has_queued_tasks() -> bool:
-    """Check if any P1-P3 tasks exist (not just P1)."""
+    """Check if any P1-P2 tasks exist (excludes P3 recurring schedules).
+
+    P3 tasks are always unchecked (recurring), so including them here
+    would make the daemon ALWAYS use base_cooldown instead of the longer
+    background_cooldown. P3 timing is handled by seconds_until_next_schedule().
+    """
     content = read_file(QUEUE_DIR / "TASK_QUEUE.md")
     in_task_section = False
     for line in content.splitlines():
-        if "### P1" in line or "### P2" in line or "### P3" in line:
+        if "### P1" in line or "### P2" in line:
             in_task_section = True
-        elif "### Completed" in line:
+        elif line.startswith("###"):
             in_task_section = False
         elif in_task_section and "- [ ]" in line:
             return True
@@ -396,8 +593,20 @@ def log_cycle(cycle_id: int, result: dict, cooldown: float):
         "duration_seconds": round(result.get("duration", 0), 1),
         "cooldown": round(cooldown),
     }
+    if "usage" in result:
+        entry["usage"] = result["usage"]
+        entry["cost_usd"] = round(result.get("cost_usd", 0), 4)
+    log_path = BASE_DIR / "logs" / "cycles.jsonl"
     try:
-        with open(BASE_DIR / "logs" / "cycles.jsonl", "a") as f:
+        # Guard against duplicate cycle IDs (from past multi-daemon bugs)
+        if log_path.exists():
+            for line in reversed(log_path.read_text().strip().splitlines()[-5:]):
+                try:
+                    if json.loads(line).get("cycle_id") == cycle_id:
+                        return  # Already logged
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        with open(log_path, "a") as f:
             f.write(json.dumps(entry) + "\n")
     except OSError:
         pass
@@ -470,6 +679,41 @@ def main():
     global _active_process
 
     ensure_dirs()
+
+    # Single-instance guard: fcntl.flock() for atomic mutual exclusion.
+    # The PID file approach had race conditions; flock is kernel-level.
+    lock_file = BASE_DIR / "logs" / "daemon.lock"
+    lock_fd = open(lock_file, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # Another daemon holds the lock
+        print("Another daemon instance is already running (flock held). Exiting.")
+        lock_fd.close()
+        sys.exit(1)
+    # Lock acquired. Write PID for observability (not for locking).
+    my_pid = os.getpid()
+    PID_FILE.write_text(str(my_pid))
+
+    # Kill stale daemon processes from before the lockfile era.
+    # The flock guarantees we're the only legitimate instance, so any
+    # other daemon.py process is a zombie from a pre-lockfile launch.
+    try:
+        r = subprocess.run(
+            ["pgrep", "-f", "python3 daemon.py"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for pid_str in r.stdout.strip().splitlines():
+            try:
+                pid = int(pid_str.strip())
+                if pid != my_pid:
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"Killed stale daemon PID {pid}")
+            except (ValueError, ProcessLookupError, PermissionError):
+                pass
+    except Exception:
+        pass
+
     config = load_config()
     run_once = "--once" in sys.argv
 
@@ -492,6 +736,9 @@ def main():
             except subprocess.TimeoutExpired:
                 _active_process.kill()
                 _active_process.wait()
+        PID_FILE.unlink(missing_ok=True)
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
@@ -511,6 +758,10 @@ def main():
             daemon_session_id = sid
             log.info(f"Restored session {sid[:8]}...")
 
+    # Load SOUL.md once for injection via --append-system-prompt
+    soul_path = BASE_DIR / "SOUL.md"
+    soul_content = read_file(soul_path) if soul_path.exists() else ""
+
     log.info(f"LOBOTOMY starting at cycle #{cycle_id}")
 
     while True:
@@ -524,13 +775,15 @@ def main():
         if not auth_valid:
             log.warning("Auth invalid. Testing...")
             test = run_cc(
-                "respond with OK", str(BASE_DIR), 30, config["claude_command"]
+                "respond with OK", str(BASE_DIR), 30, config["claude_command"],
+                tools="",
             )
             if test["status"] == "success":
                 auth_valid = True
                 log.info("Auth restored.")
             else:
-                time.sleep(300)
+                log.info("Auth still invalid. Sleeping 300s (interruptible).")
+                interruptible_sleep(300)
                 continue
 
         # Daily health check
@@ -544,11 +797,15 @@ def main():
         # Run cycle
         laptop = check_laptop(config)
         resuming = daemon_session_id is not None
-        prompt = build_prompt(cycle_id, laptop, continued=resuming)
+        laptop_cfg = config.get("laptop")
+        prompt = build_prompt(cycle_id, laptop, laptop_config=laptop_cfg, continued=resuming)
 
         mode = f"resume {daemon_session_id[:8]}..." if resuming else "fresh"
         log.info(f"Cycle #{cycle_id} starting ({mode})")
 
+        fallback = config.get("fallback_model")
+        effort = "high" if has_urgent_tasks() else config.get("background_effort", "medium")
+        budget = config.get("max_budget_usd")
         result = run_cc(
             prompt,
             str(BASE_DIR),
@@ -556,14 +813,19 @@ def main():
             config["claude_command"],
             resume_session_id=daemon_session_id,
             cycle_id=cycle_id,
+            fallback_model=fallback,
+            effort=effort,
+            max_budget_usd=budget,
+            append_system_prompt=soul_content if soul_content else None,
+            name="lobotomy-daemon",
         )
 
-        # If --resume failed, retry as fresh session
-        if resuming and result["status"] == "error":
+        # If --resume failed or timed out, retry as fresh session
+        if resuming and result["status"] in ("error", "timeout"):
             log.warning("Resumed session failed. Retrying fresh.")
             daemon_session_id = None
             session_file.unlink(missing_ok=True)
-            prompt = build_prompt(cycle_id, laptop, continued=False)
+            prompt = build_prompt(cycle_id, laptop, laptop_config=laptop_cfg, continued=False)
             result = run_cc(
                 prompt,
                 str(BASE_DIR),
@@ -571,6 +833,11 @@ def main():
                 config["claude_command"],
                 resume_session_id=None,
                 cycle_id=cycle_id,
+                fallback_model=fallback,
+                effort=effort,
+                max_budget_usd=budget,
+                append_system_prompt=soul_content if soul_content else None,
+                name="lobotomy-daemon",
             )
 
         log.info(
@@ -585,6 +852,15 @@ def main():
             session_file.unlink(missing_ok=True)
             cooldown = 300
             log.error("Auth failure detected")
+            # Write handoff so bot can alert Max via Telegram
+            handoff = QUEUE_DIR / "HANDOFF.md"
+            handoff.write_text(
+                f"# Auth Failure — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+                "CC authentication expired. Daemon is paused until re-auth.\n\n"
+                "## BLOCKED: needs Max\n\n"
+                "To fix: `ssh -L 7776:localhost:7776 max@204.168.180.135` "
+                "then run `claude /login` on the VPS.\n"
+            )
         elif result["status"] == "rate_limit":
             cooldown = min(
                 cooldown * config["backoff_multiplier"], config["max_cooldown"]
@@ -618,6 +894,16 @@ def main():
 
         log_cycle(cycle_id, result, cooldown)
         cycle_id += 1
+
+        # Check for restart signal (self-improvement modified code)
+        restart_file = QUEUE_DIR / ".restart"
+        if restart_file.exists():
+            try:
+                restart_file.unlink()
+            except OSError:
+                pass
+            log.info("Restart signal detected. Exiting for restart.")
+            break
 
         if run_once:
             log.info("--once flag set. Exiting after single cycle.")

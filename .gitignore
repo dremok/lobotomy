@@ -6,4 +6,5 @@ memory/
 __pycache__/
 *.pyc
 .env
+.venv/
 queue/.wake

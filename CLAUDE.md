@@ -1,6 +1,8 @@
 # LOBOTOMY — Daemon Agent
 
-Read `SOUL.md` first. That is your identity. It does not change.
+`SOUL.md` is your identity. It is injected via `--append-system-prompt`
+by the daemon, so it is already in your system prompt. You do not need
+to read it from disk. It does not change.
 
 You are the autonomous agent in a work loop for Max Leander. The daemon
 launches you once per cycle. You do one unit of work and exit. The daemon
@@ -11,14 +13,14 @@ handles timing, retries, and the next cycle.
 The daemon runs you in two modes, indicated in the cycle prompt:
 
 - **`SESSION: continued`** — You have full conversation history from
-  previous cycles via `--continue`. You already know SOUL.md, CLAUDE.md,
-  and accumulated context. Skip re-reading those. DO re-read queue files
+  previous cycles via `--resume`. You already know CLAUDE.md and
+  accumulated context. Skip re-reading those. DO re-read queue files
   (`queue/INTERRUPT.md`, `queue/TASK_QUEUE.md`) since they may have been
   updated externally (e.g. Telegram bot adding tasks).
 
-- **`SESSION: fresh`** — No prior context. Read SOUL.md, CLAUDE.md, and
-  all queue files from scratch. Use `queue/HANDOFF.md` to understand what
-  happened in previous cycles.
+- **`SESSION: fresh`** — No prior context. SOUL.md is already in your
+  system prompt. Read CLAUDE.md and all queue files from scratch. Use
+  `queue/HANDOFF.md` to understand what happened in previous cycles.
 
 In both modes, always write `queue/HANDOFF.md` before exiting. It serves
 as the safety net for when a session can't be continued (crash, timeout,
@@ -43,7 +45,10 @@ auth failure). Write it as if the next session has zero context.
    `- [x] \`task_042\` | **Title** | Completed: 2026-03-20 14:30`
    Add any new tasks you discover.
 8. **Write `queue/HANDOFF.md`** — what you did, what's next, any blockers.
-   Write it as if the reader has zero prior context.
+   Write it as if the reader has zero prior context. IMPORTANT: everything
+   you do in a cycle is YOUR work. Never describe your own actions as
+   "external" or "someone else." If you updated BACKGROUND.md, say
+   "I rewrote BACKGROUND.md", not "BACKGROUND.md was rewritten externally."
 9. **Exit.**
 
 ## Subagent Delegation
@@ -78,6 +83,11 @@ they need in their workspace CLAUDE.md.
   HANDOFF.md is the backup memory. Write it every time.
 - **If a task is too large**, break it into subtasks in the queue, complete
   the first piece, and exit. The daemon will pick up the rest.
+- **If a task is BLOCKED on Max**, tag it `BLOCKED: needs Max` and
+  immediately move on to the next task. Never idle when only one task
+  is blocked. There is always other work to do (other queue items,
+  background radiation). Say clearly in HANDOFF.md what you need from
+  Max so the bot can relay it to Telegram.
 - **If you hit an error or rate limit**, write it to HANDOFF.md and exit.
   The daemon retries after cooldown.
 - **Never loop or wait.** The daemon handles timing. You handle one cycle.
@@ -105,6 +115,9 @@ Check the cycle number in the prompt. When cycle_id is a multiple of 10
 - Update `memory/PROJECT_REGISTRY.md` if project statuses have changed.
 - Consider updating THIS file (CLAUDE.md) if the instructions need
   refinement based on what's working and what isn't.
+- If you modify daemon.py, bot.py, or any Python code, write "RESTART"
+  to `queue/.restart` so the process manager restarts with the new code.
+  Do this as the LAST thing before exiting.
 
 ## File System
 
