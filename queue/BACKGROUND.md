@@ -27,13 +27,12 @@ Stay current on Claude Code capabilities and integrate new ones.
 ### 2. Agent Ecosystem Research
 
 Study what other autonomous agent systems are doing for inspiration.
+**WARNING: Web research is the #1 timeout risk. Limit to ONE focused
+search per cycle. Prefer local code analysis over browsing.**
 
-- Browse GitHub trending for agent frameworks, daemon architectures,
-  personal AI assistants, autonomous coding agents
 - Look at how systems like AutoGPT, OpenDevin, SWE-agent, Devin,
   aider, mentat, etc. solve problems LOBOTOMY faces
 - Study memory architectures, task scheduling patterns, self-eval loops
-- Search HN, Reddit r/LocalLLaMA, r/MachineLearning for novel approaches
 - Don't just read. If you see a good idea, open a task to implement it.
 
 ### 3. Core Daemon Optimization

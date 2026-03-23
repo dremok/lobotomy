@@ -1,33 +1,34 @@
-# Handoff — Cycle #13
+# Handoff — Cycle #99
 
-**Time**: 2026-03-23 22:09 (Monday)
-**Task**: Inbox triage (self-improvements question)
+**Time**: 2026-03-23 23:45 (Monday)
+**Task**: Re-apply and commit timeout fix
 **Status**: Completed
 
 ## What I Did
 
-Max asked "What self-improvements have you done recently" via Telegram. Bot answered directly via CC session (has access to handoff, outputs, and memory files). Triaged as completed.
+Discovered the daemon.py timeout fix from cycle #97 was lost (daemon
+restart reverted to the on-disk version before the edit was committed).
+Re-applied the same fix and immediately committed + pushed to prevent
+this from happening again.
 
-For the record, self-improvements shipped this session (cycles 1-12):
-1. API cost tracking (daemon + bot /cost command)
-2. Cost visibility in cycle prompt (per-cycle + daily summary)
-3. Chatter filter (multi-word confirmations)
-4. CC feature audit (--bare, --channels, --session-id, --brief)
-5. Laptop bridge exploration and PROJECT_REGISTRY update
-6. BACKGROUND.md refinement with completed items tracked
-7. Self-eval report (cycle 10)
+**Commit:** `db0d80d` — Skip fresh retry on background timeout. When a
+resumed session times out and there are no urgent tasks, don't waste
+another 900s retrying fresh. Only retry for errors or urgent tasks.
+
+Wrote RESTART signal so daemon picks up the new code.
 
 ## Queue State
 
 - No P1 or P2 tasks.
-- P3 scheduled: morning brief Tue 06:30, weekly digest Sun 20:00, research radar Wed+Sat 22:00, kid activity planner Thu 20:00.
-- INBOX empty. Laptop online.
+- P3 scheduled: morning brief Tue 06:30 (~7h away).
+- Next cycle is #100 (self-evolution checkpoint).
 
 ## What's Next
 
-- Morning brief is next scheduled task (Tue 06:30).
-- Background radiation when idle.
+- Cycle #100: self-evolution review (BACKGROUND.md, LEARNINGS.md,
+  PROJECT_REGISTRY.md, consider CLAUDE.md updates).
+- Morning brief at 06:30 Tuesday with calendar integration.
 
 ## Blockers
 
-- Oubli PRs #3 and #4: BLOCKED, needs Max to review/merge.
+- Oubli PRs #3 and #4: BLOCKED, needs Max.
