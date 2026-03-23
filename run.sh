@@ -9,6 +9,7 @@ cd "$(dirname "$0")"
 
 DAEMON_PID=""
 BOT_PID=""
+WA_PID=""
 
 # Crash loop detection: track restart timestamps in files.
 # If more than MAX_RESTARTS occur within WINDOW seconds, back off.
@@ -16,6 +17,7 @@ MAX_RESTARTS=5
 WINDOW=300  # 5 minutes
 DAEMON_BACKOFF=3
 BOT_BACKOFF=3
+WA_BACKOFF=3
 
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
@@ -23,8 +25,10 @@ mkdir -p "$LOG_DIR"
 # Crash loop state files (timestamps, one per line)
 DAEMON_RESTART_LOG="$LOG_DIR/.daemon_restarts"
 BOT_RESTART_LOG="$LOG_DIR/.bot_restarts"
+WA_RESTART_LOG="$LOG_DIR/.wa_restarts"
 : > "$DAEMON_RESTART_LOG"
 : > "$BOT_RESTART_LOG"
+: > "$WA_RESTART_LOG"
 
 # ── Venv ────────────────────────────────────────────────────────────────
 
@@ -61,6 +65,12 @@ kill_stale() {
     stale=$(pgrep -f "python3 bot\.py" 2>/dev/null || true)
     if [[ -n "$stale" ]]; then
         echo "[$(date)] Killing stale bot PIDs: $stale"
+        kill $stale 2>/dev/null || true
+        sleep 1
+    fi
+    stale=$(pgrep -f "python3 whatsapp_bot\.py" 2>/dev/null || true)
+    if [[ -n "$stale" ]]; then
+        echo "[$(date)] Killing stale whatsapp_bot PIDs: $stale"
         kill $stale 2>/dev/null || true
         sleep 1
     fi
@@ -116,12 +126,29 @@ start_bot() {
     echo "[$(date)] Bot started (PID: $BOT_PID, log: $LOG_DIR/$today/bot.log)"
 }
 
+start_whatsapp() {
+    # Only start if whatsapp-mcp directory exists
+    if [[ ! -d "whatsapp-mcp" ]]; then
+        echo "[$(date)] whatsapp-mcp/ not found, skipping WhatsApp bot"
+        WA_PID=""
+        return
+    fi
+    local today
+    today=$(date +%Y-%m-%d)
+    mkdir -p "$LOG_DIR/$today"
+    rm -f queue/.restart-whatsapp
+    python3 whatsapp_bot.py >> "$LOG_DIR/$today/whatsapp.log" 2>&1 &
+    WA_PID=$!
+    echo "[$(date)] WhatsApp bot started (PID: $WA_PID, log: $LOG_DIR/$today/whatsapp.log)"
+}
+
 cleanup() {
     echo "[$(date)] Shutting down..."
     [[ -n "$DAEMON_PID" ]] && kill "$DAEMON_PID" 2>/dev/null || true
     [[ -n "$BOT_PID" ]] && kill "$BOT_PID" 2>/dev/null || true
+    [[ -n "$WA_PID" ]] && kill "$WA_PID" 2>/dev/null || true
     wait 2>/dev/null || true
-    rm -f logs/daemon.pid "$DAEMON_RESTART_LOG" "$BOT_RESTART_LOG"
+    rm -f logs/daemon.pid "$DAEMON_RESTART_LOG" "$BOT_RESTART_LOG" "$WA_RESTART_LOG"
     echo "[$(date)] Done."
     exit 0
 }
@@ -133,8 +160,9 @@ setup_venv
 kill_stale
 start_daemon
 start_bot
+start_whatsapp
 
-echo "LOBOTOMY running (daemon PID: $DAEMON_PID, bot PID: $BOT_PID)"
+echo "LOBOTOMY running (daemon PID: $DAEMON_PID, bot PID: $BOT_PID, wa PID: ${WA_PID:-none})"
 echo "Ctrl-C to stop."
 
 while true; do
@@ -170,5 +198,21 @@ while true; do
         echo "[$(date)] Bot exited. Restarting in ${BOT_BACKOFF}s..."
         sleep "$BOT_BACKOFF"
         start_bot
+    fi
+
+    # WhatsApp bot restart with crash loop protection
+    if [[ -n "$WA_PID" ]] && ! kill -0 "$WA_PID" 2>/dev/null; then
+        record_restart "$WA_RESTART_LOG"
+        count=$(count_recent_restarts "$WA_RESTART_LOG")
+        if (( count > MAX_RESTARTS )); then
+            WA_BACKOFF=$(( WA_BACKOFF * 2 ))
+            if (( WA_BACKOFF > 300 )); then WA_BACKOFF=300; fi
+            echo "[$(date)] WhatsApp bot crash loop ($count restarts in ${WINDOW}s). Backing off ${WA_BACKOFF}s."
+        else
+            WA_BACKOFF=3
+        fi
+        echo "[$(date)] WhatsApp bot exited. Restarting in ${WA_BACKOFF}s..."
+        sleep "$WA_BACKOFF"
+        start_whatsapp
     fi
 done
