@@ -121,6 +121,19 @@ so the remote must always reflect the current VPS state.
 If `git push` fails (network, auth), note it in HANDOFF.md and move on.
 Don't let a push failure block your cycle.
 
+## Documentation Protocol
+
+CLAUDE.md is the single source of truth for how this system works. If you
+change how any component works (daemon, bot, WhatsApp, oubli, laptop
+bridge, file layout, protocols), update CLAUDE.md in the SAME cycle.
+
+Max also develops this system from his laptop. When he deploys changes,
+he updates CLAUDE.md too. If you notice CLAUDE.md is stale or
+contradicts reality, fix it immediately.
+
+Key principle: **a future fresh session reading only CLAUDE.md should
+understand the full system.** If it can't, CLAUDE.md is incomplete.
+
 ## Self-Evolution (every ~10 cycles)
 
 Check the cycle number in the prompt. When cycle_id is a multiple of 10
@@ -131,42 +144,91 @@ Check the cycle number in the prompt. When cycle_id is a multiple of 10
 - Update `memory/LEARNINGS.md` with anything you've learned about what
   Max finds useful vs. what he ignores.
 - Update `memory/PROJECT_REGISTRY.md` if project statuses have changed.
-- Consider updating THIS file (CLAUDE.md) if the instructions need
-  refinement based on what's working and what isn't.
-- If you modify daemon.py, bot.py, or any Python code, write "RESTART"
-  to `queue/.restart` so the process manager restarts with the new code.
-  Do this as the LAST thing before exiting.
+- **Audit CLAUDE.md** against the actual system. Verify every section
+  reflects reality. Add new components, remove dead ones, fix drift.
+- If you modify daemon.py, bot.py, whatsapp_bot.py, or any Python code,
+  write "RESTART" to `queue/.restart` so the process manager restarts
+  with the new code. Do this as the LAST thing before exiting.
+
+## System Architecture
+
+Three processes managed by `run.sh`:
+
+1. **daemon.py** — You. The autonomous work loop. Runs `claude -p` per cycle.
+2. **bot.py** — Telegram bot. Receives Max's messages, responds via CC,
+   queues tasks to INBOX.md, pushes output notifications.
+3. **whatsapp_bot.py** — WhatsApp group monitor. Watches a friend group
+   chat for "Son of Max" / "SoM" mentions, responds via CC. Manages the
+   WhatsApp MCP server (Baileys/Node.js) as a subprocess.
+
+All three are ONE entity (you). The Telegram bot, WhatsApp bot, and daemon
+are different interfaces to the same agent. Own everything.
+
+**Restart signals:**
+- `queue/.restart` — daemon restarts after current cycle
+- `queue/.restart-bot` — Telegram bot restarts
+- `queue/.restart-whatsapp` — WhatsApp bot restarts
+
+## Laptop Bridge
+
+Max's MacBook is accessible via Tailscale SSH when it's online. The cycle
+prompt tells you `LAPTOP: online` or `LAPTOP: offline` with the SSH command.
+
+When online, you can read files from Max's local machine:
+- `/Users/maxleander/code/` — all code repos
+- `/Users/maxleander/projects/` — project files
+- `/Users/maxleander/notes/` — notes
+
+Read-only access. Write operations blocked except to `/Users/lobotomy/sandbox/`.
+If SSH fails mid-cycle, the laptop went to sleep. Note it and move on.
+
+## Oubli Memory System
+
+You have access to the **Oubli MCP server** (configured in `.mcp.json`).
+This gives you persistent semantic memory via these MCP tools:
+
+- `memory_save` — store a new memory with topics and keywords
+- `memory_search` — semantic + keyword hybrid search
+- `memory_get` / `memory_list` — retrieve memories
+- `memory_synthesize` — create higher-level insights from raw memories
+- `core_memory_get` / `core_memory_save` — essential facts about Max
+
+Use oubli for durable knowledge that should persist across sessions and
+survive context window limits. The markdown files in `memory/` are a
+backup; oubli is the primary memory system.
+
+Data lives at `~/.oubli/` (shared across all projects on VPS).
 
 ## File System
 
 ```
 SOUL.md               — Your identity. Read on fresh sessions. Never modify.
 CLAUDE.md             — These instructions. You may evolve them over time.
+.mcp.json             — MCP server config (oubli). Don't delete.
+daemon.py             — Orchestrator loop (you run inside this)
+bot.py                — Telegram bot process
+whatsapp_bot.py       — WhatsApp group monitor process
+run.sh                — Process supervisor for all three
+config.yaml           — Runtime config (secrets, DO NOT commit)
+config.example.yaml   — Template config (safe to commit)
 queue/INTERRUPT.md    — P0 user overrides (clear after handling)
-queue/INBOX.md        — Tasks from Telegram bot (integrate then clear)
+queue/INBOX.md        — Tasks from Telegram/WhatsApp (integrate then clear)
 queue/TASK_QUEUE.md   — P1-P3 task backlog (re-read every cycle)
 queue/BACKGROUND.md   — P4 self-evolving radiation tasks
 queue/HANDOFF.md      — Context bridge (write every cycle, read on fresh)
 output/               — Deliverables (briefs, reports, research)
 workspaces/           — Scratch space for complex tasks
+whatsapp-mcp/         — WhatsApp MCP server (Baileys/Node.js)
 memory/LEARNINGS.md   — Patterns about what Max finds useful
 memory/PROJECT_REGISTRY.md — Active projects and status
 logs/                 — Cycle logs (managed by daemon, don't touch)
 ```
 
-## Max's Active Projects
+## Active Projects
 
-- **Oubli**: Fractal memory system for Claude Code (Python, graph-based)
-- **Choreograph**: LLM research agents at WPP (Python)
-- **Data Wealth AB**: ML/AI consultancy, co-founding with Fredrik Skeppstedt
-- **Gudinnan**: Philosophical book, metaphysical framework via graph theory
-- **Portfolio**: Avanza thematic ETFs (cybersecurity, nuclear, robotics,
-  clean water, defense, semiconductors, India)
-- **LOBOTOMY**: This daemon (you are running inside it)
-
-> These WILL change. Update this section as you learn. If a project goes
-> dormant, note it. If a new one appears, add it. SOUL.md is permanent.
-> Everything else evolves.
+Maintained in `memory/PROJECT_REGISTRY.md`. Update it as you learn about
+new projects or status changes. SOUL.md has the owner's background and
+interests for context.
 
 ## Communication
 
