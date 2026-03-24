@@ -495,11 +495,10 @@ def has_urgent_tasks() -> bool:
 
 
 def has_queued_tasks() -> bool:
-    """Check if any P1-P2 tasks exist (excludes P3 recurring schedules).
+    """Check if any actionable P1-P2 tasks exist.
 
-    P3 tasks are always unchecked (recurring), so including them here
-    would make the daemon ALWAYS use base_cooldown instead of the longer
-    background_cooldown. P3 timing is handled by seconds_until_next_schedule().
+    Excludes P3 (recurring, always unchecked) and BLOCKED tasks.
+    P3 timing is handled by seconds_until_next_schedule().
     """
     content = read_file(QUEUE_DIR / "TASK_QUEUE.md")
     in_task_section = False
@@ -509,7 +508,8 @@ def has_queued_tasks() -> bool:
         elif line.startswith("###"):
             in_task_section = False
         elif in_task_section and "- [ ]" in line:
-            return True
+            if "BLOCKED" not in line.upper():
+                return True
     return False
 
 
