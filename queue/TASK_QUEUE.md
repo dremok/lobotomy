@@ -12,6 +12,7 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774347193576` | **Availability noted** | 10:13 (Max available for blockers, Trello creds requested)
 - [x] `tg_1774346994760` | **Gmail/Calendar MCP confirmed** | 10:09 (yes, verified and used for morning brief)
 - [x] `tg_1774346878103` | **Trello + morning brief spec** | 10:07 (no Trello MCP, queued as P2 blocked on credentials)
 - [x] `tg_1774342374476` | **Morning brief rewrite** | 08:52 (rewrote to lead with functional work, not stats/calendar)
