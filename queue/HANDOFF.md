@@ -1,12 +1,18 @@
-# Handoff — Cycle #63
+# Handoff — Cycle #64
 
-**Time**: 2026-03-24 18:06 (Tuesday)
-**Task**: P1 — Fix bot restart conflicts
+**Time**: 2026-03-24 18:11 (Tuesday)
+**Task**: Fix stale daemon alert + persist conversation history
 **Status**: Completed
 
 ## What I Did
 
-Fixed bot restart issues: added `drop_pending_updates=True` to prevent Telegram API conflicts during restarts, and suppressed transient Conflict/TimedOut errors in the error handler. Committed, pushed, bot restart signaled.
+1. **Stale daemon alert fix**: Increased DAEMON_STALE_SECONDS from 1800 to 4500 (75 min) to match background cooldown of 3600s. Was falsely alerting during normal idle.
+
+2. **Persistent conversation**: Conversation history now saved to logs/conversation.jsonl. Survives bot restarts. Max noted the bot could only see 1-2 messages.
+
+3. **GitHub push protection**: Removed tg_*.txt files containing Trello token from git tracking.
+
+Committed, pushed, bot restart signaled.
 
 ## Queue State
 

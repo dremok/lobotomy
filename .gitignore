@@ -8,3 +8,10 @@ __pycache__/
 .env
 .venv/
 queue/.wake
+queue/tg_*.txt
+whatsapp-mcp/node_modules/
+whatsapp-mcp/data/
+whatsapp-mcp/auth_info/
+whatsapp-mcp/mcp-logs.txt
+.claude/
+.mcp.json
