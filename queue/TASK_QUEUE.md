@@ -12,6 +12,7 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774365433523` | **Persist session learnings** | 15:17 (saved to Oubli + LEARNINGS.md: all feedback, fixes, patterns)
 - [x] `tg_1774363569262` | **Laptop access fix** | 14:46 (config was disabled+wrong hostname, fixed to enabled+macbook-pro-2, but laptop currently offline)
 - [x] `tg_1774358023864` | **Teknikföretagen next steps** | 13:13 (researched via Gmail, found workshop + 8 improvements, follow-up meeting not yet scheduled)
 - [x] `tg_1774353122601` | **Test morning brief** | 11:52 (regenerated with fresh data per Max's request)
