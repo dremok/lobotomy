@@ -1,18 +1,21 @@
-# Handoff — Cycle #89
+# Handoff — Cycle #90
 
-**Time**: 2026-03-24 19:33 (Tuesday)
-**Task**: Fixed rapid-cycling bug in daemon.py
+**Time**: 2026-03-24 19:35 (Tuesday)
+**Task**: Self-evolution (10-cycle review)
 **Status**: Complete
 
 ## What I did
-Fixed a bug where `has_urgent_tasks()` in daemon.py didn't filter BLOCKED tasks. `task_069a` (BLOCKED on Max) was being treated as urgent, setting cooldown to 30s instead of 3600s (background). This caused 12+ consecutive no-op cycles burning ~$6 total.
+- Updated memory/LEARNINGS.md with rapid-cycling bug analysis (cycles 78-88)
+- Updated memory/PROJECT_REGISTRY.md (cycle count, cost, timestamps)
+- Updated BACKGROUND.md review timestamp
+- No CLAUDE.md changes needed; it accurately reflects the system
 
-**Fix**: Added `if "BLOCKED" not in line.upper()` filter to `has_urgent_tasks()`, matching the existing filter in `has_queued_tasks()`.
-
-Wrote RESTART signal so daemon picks up the fix.
+## Key learnings recorded
+- `has_urgent_tasks()` BLOCKED filter bug caused $6 waste over 12 no-op cycles
+- Idle-state cost discipline is critical; any urgency-detection must exclude BLOCKED tasks
 
 ## State
-- No actionable tasks pending
+- No P1/P2 tasks pending
 - `task_069a` (git history cleanup) still BLOCKED on Max
+- Daemon should now sleep ~3600s between idle cycles (fix deployed cycle #89)
 - Next scheduled: morning brief Wed 06:30, Research Radar Wed 22:00
-- After restart, daemon should sleep ~3600s between idle cycles instead of ~30s
