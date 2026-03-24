@@ -10,7 +10,13 @@
 - [ ] `sched_research` | **Research Radar** | Cron: Wednesday+Saturday 22:00
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
+### Completed (2026-03-24)
+- [x] `tg_1774317537181` | **Pricing fix** | 01:58 (was using Opus 4.0 prices $15/$75, corrected to Opus 4.6 $5/$25)
+- [x] `tg_1774317361878` | **Cost confusion clarified** | 01:56 (estimates based on API pricing, not actual charges on Max sub)
+- [x] `tg_1774317224951` | **Last 2 hours summary** | 01:53 (answered via bot)
+
 ### Completed (2026-03-23)
+- [x] `tg_1774307074785` | **BlueRock question (duplicate)** | 23:04 (answered in cycle #18)
 - [x] `email_digest` | **Scheduled email digest** | 23:02 (08:00 + 20:00 daily digest emails)
 - [x] `tg_1774306939007` | **Email task status** | 23:02 (answered: port fix done, emails working, digest P2 queued)
 - [x] `tg_1774306878834` | **BlueRock info from Oubli** | 23:01 (answered: $110/hr Upwork, AI stock prediction pipeline, Jonathan Adest, Jonas Hallgren)

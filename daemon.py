@@ -37,10 +37,10 @@ RATE_LIMITS = [
 
 # Claude Opus 4.6 pricing (USD per million tokens)
 TOKEN_PRICING = {
-    "input": 15.0,
-    "output": 75.0,
-    "cache_creation": 18.75,
-    "cache_read": 1.50,
+    "input": 5.0,
+    "output": 25.0,
+    "cache_creation": 6.25,
+    "cache_read": 0.50,
 }
 
 # Track active subprocess for clean shutdown
