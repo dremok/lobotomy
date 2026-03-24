@@ -752,6 +752,8 @@ def main():
     # Persist session ID across restarts
     session_file = BASE_DIR / "logs" / "session_id"
     daemon_session_id: str | None = None
+    session_cycle_count = 0
+    session_reset_interval = config.get("session_reset_interval", 15)
     if session_file.exists():
         sid = session_file.read_text().strip()
         if sid:
@@ -793,6 +795,18 @@ def main():
             log.info("Running health check")
             run_health_check(config["claude_command"])
             last_health = now
+
+        # Periodic session reset to prevent context bloat.
+        # Accumulated conversation history grows cache writes each cycle.
+        # Resetting every N cycles brings costs back down.
+        if daemon_session_id and session_cycle_count >= session_reset_interval:
+            log.info(
+                f"Session reset after {session_cycle_count} cycles "
+                f"(interval: {session_reset_interval})"
+            )
+            daemon_session_id = None
+            session_file.unlink(missing_ok=True)
+            session_cycle_count = 0
 
         # Run cycle
         laptop = check_laptop(config)
@@ -858,6 +872,7 @@ def main():
             auth_valid = False
             daemon_session_id = None
             session_file.unlink(missing_ok=True)
+            session_cycle_count = 0
             cooldown = 300
             log.error("Auth failure detected")
             # Write handoff so bot can alert Max via Telegram
@@ -877,12 +892,14 @@ def main():
         elif result["status"] in ("error", "timeout"):
             daemon_session_id = None
             session_file.unlink(missing_ok=True)
+            session_cycle_count = 0
             cooldown = min(cooldown * 1.5, config["max_cooldown"])
             log.warning(f"Cycle failed: {result['status']}")
         else:
             # Capture session ID for --resume on next cycle (persisted to file)
             if result.get("session_id"):
                 daemon_session_id = result["session_id"]
+                session_cycle_count += 1
                 try:
                     session_file.write_text(daemon_session_id)
                 except OSError:
