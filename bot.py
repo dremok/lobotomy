@@ -119,7 +119,7 @@ def laptop_ssh_cmd(cmd: str) -> str:
 
 
 def send_email(subject: str, body: str):
-    """Send an email via Gmail SMTP (port 587 STARTTLS). Fails silently."""
+    """Send an email via Gmail SMTP (port 587 STARTTLS). Logs success/failure."""
     if not EMAIL_CONFIG or not EMAIL_CONFIG.get("enabled"):
         return
     try:
@@ -131,8 +131,9 @@ def send_email(subject: str, body: str):
             server.starttls()
             server.login(EMAIL_CONFIG["from"], EMAIL_CONFIG["app_password"])
             server.send_message(msg)
+        print(f"Email sent: {subject}")
     except Exception as e:
-        print(f"Email error: {e}")
+        print(f"Email error ({subject}): {e}")
 
 
 # ─── CC runner ──────────────────────────────────────────────────────────────
