@@ -1,17 +1,21 @@
 """Trello API helper for LOBOTOMY morning brief.
 
-Fetches cards from Max's "Dagens TODO" board.
-Requires TRELLO_KEY and TRELLO_TOKEN in config.yaml under trello: section.
+Fetches cards from Max's "Dagens TODO" board with age metadata.
+Requires trello.key and trello.token in config.yaml.
 """
 
 import json
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 BASE_URL = "https://api.trello.com/1"
+
+# Lists where lingering cards should be flagged
+ACTIONABLE_LISTS = {"idag", "imorgon", "hann inte", "framtiden / inte hunnit än"}
 
 
 def load_trello_config() -> dict | None:
@@ -47,31 +51,56 @@ def find_board(key: str, token: str, board_name: str = "Dagens TODO") -> str | N
     return None
 
 
+def card_created_date(card_id: str) -> datetime:
+    """Extract creation timestamp from Trello card ID (MongoDB ObjectId)."""
+    return datetime.fromtimestamp(int(card_id[:8], 16), tz=timezone.utc)
+
+
 def get_board_cards(key: str, token: str, board_id: str) -> list[dict]:
-    """Get all cards on a board, grouped by list."""
+    """Get all cards on a board, grouped by list, with age metadata."""
     lists = _get(f"/boards/{board_id}/lists", key, token, {"fields": "name"})
+    now = datetime.now(timezone.utc)
     result = []
     for lst in lists:
         cards = _get(f"/lists/{lst['id']}/cards", key, token,
-                     {"fields": "name,due,labels"})
+                     {"fields": "name,due,dateLastActivity"})
         if cards:
+            card_data = []
+            for c in cards:
+                created = card_created_date(c["id"])
+                last_act = datetime.fromisoformat(
+                    c.get("dateLastActivity", "").replace("Z", "+00:00")
+                ) if c.get("dateLastActivity") else created
+                card_data.append({
+                    "name": c["name"],
+                    "due": c.get("due"),
+                    "age_days": (now - created).days,
+                    "stale_days": (now - last_act).days,
+                })
             result.append({
                 "list": lst["name"],
-                "cards": [{"name": c["name"], "due": c.get("due")} for c in cards],
+                "cards": card_data,
             })
     return result
 
 
 def format_board_summary(board_data: list[dict]) -> str:
-    """Format board cards as readable text for the morning brief."""
+    """Format board cards for morning brief. Flag lingering items."""
     if not board_data:
         return "(no cards)"
     lines = []
     for lst in board_data:
+        is_actionable = lst["list"].lower() in ACTIONABLE_LISTS
         lines.append(f"**{lst['list']}**")
         for card in lst["cards"]:
-            due = f" (due: {card['due'][:10]})" if card.get("due") else ""
-            lines.append(f"  - {card['name']}{due}")
+            parts = [f"  - {card['name']}"]
+            if card.get("due"):
+                parts.append(f"(due: {card['due'][:10]})")
+            if is_actionable and card["age_days"] > 7:
+                parts.append(f"[{card['age_days']}d old]")
+            elif is_actionable and card["stale_days"] > 3:
+                parts.append(f"[stale {card['stale_days']}d]")
+            lines.append(" ".join(parts))
     return "\n".join(lines)
 
 
