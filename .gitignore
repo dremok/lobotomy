@@ -5,6 +5,7 @@ config.yaml
 
 # Personal / private
 SOUL.md
+LOBOTOMY_SPEC.md
 memory/
 output/
 logs/
