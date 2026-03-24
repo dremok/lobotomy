@@ -856,12 +856,14 @@ def main():
         log.info(f"Cycle #{cycle_id} starting ({mode})")
 
         fallback = config.get("fallback_model")
-        effort = "high" if has_urgent_tasks() else config.get("background_effort", "medium")
+        urgent = has_urgent_tasks()
+        effort = "high" if urgent else config.get("background_effort", "medium")
         budget = config.get("max_budget_usd")
+        timeout = config["session_timeout"] if urgent else config.get("background_timeout", config["session_timeout"])
         result = run_cc(
             prompt,
             str(BASE_DIR),
-            config["session_timeout"],
+            timeout,
             config["claude_command"],
             resume_session_id=daemon_session_id,
             cycle_id=cycle_id,
