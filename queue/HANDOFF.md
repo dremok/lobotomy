@@ -1,34 +1,29 @@
-# Handoff — Cycle #99
+# Handoff — Cycle #52
 
-**Time**: 2026-03-23 23:45 (Monday)
-**Task**: Re-apply and commit timeout fix
-**Status**: Completed
+**Time**: 2026-03-24 14:46 (Tuesday)
+**Task**: P1 — Fix laptop bridge config
+**Status**: Completed (config fixed, laptop currently offline)
 
 ## What I Did
 
-Discovered the daemon.py timeout fix from cycle #97 was lost (daemon
-restart reverted to the on-disk version before the edit was committed).
-Re-applied the same fix and immediately committed + pushed to prevent
-this from happening again.
+Max asked "You cannot access my laptop?" and "Don't you remember the tailscale bridge?" The laptop bridge config in config.yaml had been reverted: `enabled: false` and `hostname: maxs-laptop` (should be `macbook-pro-2`).
 
-**Commit:** `db0d80d` — Skip fresh retry on background timeout. When a
-resumed session times out and there are no urgent tasks, don't waste
-another 900s retrying fresh. Only retry for errors or urgent tasks.
+Fixed config.yaml:
+- `laptop.enabled: false` → `true`
+- `laptop.hostname: maxs-laptop` → `macbook-pro-2`
 
-Wrote RESTART signal so daemon picks up the new code.
+Tested Tailscale ping: laptop is currently offline (timed out). It works when Max's MacBook is awake and on network (confirmed in cycles #11-12 and #28 earlier today). The bridge will be available again when the laptop wakes up.
+
+Daemon restart signaled so the config change takes effect.
 
 ## Queue State
 
-- No P1 or P2 tasks.
-- P3 scheduled: morning brief Tue 06:30 (~7h away).
-- Next cycle is #100 (self-evolution checkpoint).
-
-## What's Next
-
-- Cycle #100: self-evolution review (BACKGROUND.md, LEARNINGS.md,
-  PROJECT_REGISTRY.md, consider CLAUDE.md updates).
-- Morning brief at 06:30 Tuesday with calendar integration.
+- No P1 tasks.
+- P2: Trello integration (BLOCKED on credentials).
+- P3: research radar Wed 22:00, kid activity planner Thu 20:00.
+- INBOX empty.
 
 ## Blockers
 
-- Oubli PRs #3 and #4: BLOCKED, needs Max.
+- Trello: needs API key + token from Max.
+- Laptop: config fixed, currently offline (will work when MacBook wakes up).

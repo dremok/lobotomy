@@ -12,6 +12,9 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774363569262` | **Laptop access fix** | 14:46 (config was disabled+wrong hostname, fixed to enabled+macbook-pro-2, but laptop currently offline)
+- [x] `tg_1774358023864` | **Teknikföretagen next steps** | 13:13 (researched via Gmail, found workshop + 8 improvements, follow-up meeting not yet scheduled)
+- [x] `tg_1774353122601` | **Test morning brief** | 11:52 (regenerated with fresh data per Max's request)
 - [x] `tg_1774347350921` | **Autonomy directive** | 10:15 (Max: figure out as much as possible, only ask for human-required work)
 - [x] `tg_1774347193576` | **Availability noted** | 10:13 (Max available for blockers, Trello creds requested)
 - [x] `tg_1774346994760` | **Gmail/Calendar MCP confirmed** | 10:09 (yes, verified and used for morning brief)
