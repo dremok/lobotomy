@@ -716,6 +716,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"CC response: {response[:80] if response else '(empty)'}")
     if not response:
         response = "Got your message, looking into it."
+    # Strip any raw tool call XML that leaked from a timeout/partial response
+    if "<tool_call>" in response or "<tool_use>" in response:
+        clean = re.sub(r"<tool_call>.*?</tool_call>", "", response, flags=re.DOTALL)
+        clean = re.sub(r"<tool_use>.*?</tool_use>", "", clean, flags=re.DOTALL)
+        clean = re.sub(r"<tool_call>.*$", "", clean, flags=re.DOTALL)  # unclosed tags
+        clean = re.sub(r"<tool_use>.*$", "", clean, flags=re.DOTALL)
+        response = clean.strip() or "On it, give me a moment."
     _save_conversation_entry("assistant", response)
     await update.message.reply_text(response)
 
