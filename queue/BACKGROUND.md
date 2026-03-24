@@ -2,7 +2,7 @@
 
 > When nothing is queued, improve yourself.
 > This file self-evolves. The agent updates it based on what produces value.
-> Last review: 2026-03-23 (rewritten per Max's directive)
+> Last review: 2026-03-24 cycle #70
 
 ### Core Directive
 
@@ -109,5 +109,6 @@ The less obvious stuff. Go broad when the well-trodden paths run dry.
 
 ### Maintenance (secondary, weekly)
 - Oubli PRs #3 and #4 merge status
-- Dependency security advisories (Oubli, LOBOTOMY)
+- Git hygiene: verify .gitignore matches actual tracking state (`git ls-files` vs .gitignore)
+- GitGuardian incident follow-up: WhatsApp creds still in git history (BLOCKED on Max)
 - Birthday/event tracking (Mondays, from Födelsedagar calendar)
