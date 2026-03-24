@@ -103,6 +103,23 @@ cycle prompt against P3 schedules:
   `output/morning_brief_<today>.md` doesn't exist, run it.
 - Weekly tasks: check day of week. Research radar: Wednesday + Saturday.
 
+### Morning Brief Format
+
+The morning brief should lead with **what the daemon accomplished** since
+the last brief, not calendar data or stats. Max can check his own calendar.
+
+Structure:
+1. **What I did** — concrete accomplishments, features shipped, tasks
+   completed. This is the primary value. Be specific about what changed.
+2. **Trello "Dagens TODO"** — top items from Max's Trello board (when
+   Trello integration is available, P2 blocked on API credentials).
+3. **Email** — new/important emails only. Filter out spam, promotions,
+   newsletters. Lead with actionable items. Use Gmail MCP.
+4. **Calendar** — today's events + important upcoming (next 2-3 days).
+   Use Google Calendar MCP. Include custody schedule (David-dagar,
+   Karla-dagar calendars).
+5. **Stats footer** — one line: cycle count, cost estimate, success rate.
+
 ## Git Protocol
 
 This repo is connected to GitHub (`origin`). After modifying any tracked
