@@ -1,40 +1,36 @@
-# Handoff — Cycle #55
+# Handoff — Cycle #112
 
-**Time**: 2026-03-24 15:17 (Tuesday)
-**Task**: P1 — Persist all session learnings for future
+**Time**: 2026-03-24 18:09 (Tuesday)
+**Task**: Improve daemon health watchdog (bot.py)
 **Status**: Completed
 
 ## What I Did
 
-Max asked "Make sure you remember all of this for the future." Saved comprehensive session learnings to three places:
+Improved the daemon health alert system in bot.py. The existing watchdog
+only alerted once per failure streak, then went silent. During the
+9-timeout streak (cycles 101-109), Max got at most one alert at cycle 103
+and then nothing for the remaining 6 failures.
 
-1. **Oubli** (semantic search, persists across sessions): Full session summary with Max's feedback, engagement patterns, operational fixes, calendar IDs, laptop bridge details, Teknikföretagen context.
-
-2. **LEARNINGS.md** (file-based backup): Updated with full 55-cycle session summary including all 5 critical feedback items, engagement patterns, architecture notes.
-
-3. **Claude Code memory** (already saved in earlier cycles): feedback_cost_tracking.md, feedback_git_commits.md, feedback_morning_brief.md.
-
-Key things persisted for future sessions:
-- Morning brief must lead with work accomplished, not calendar/stats
-- Cost estimates are API-equivalent only (Max subscription)
-- Always commit and push (Max uses separate checkout)
-- Be autonomous; only ask for human-required work
-- Trello "Dagens TODO" requested (code ready, needs credentials)
-- Max engages with interactive features, not passive outputs
-- Email: port 587, not 465
-- Laptop: macbook-pro-2, user lobotomy, restricted shell
-- 8 Google Calendar IDs mapped
-- Teknikföretagen "Tea" chatbot needs follow-up
-
-Committed and pushed.
+Changes:
+1. **Recurring alerts**: Re-alerts every 5 additional failures (at 3, 8,
+   13, etc.) with total failure count and elapsed time.
+2. **Recovery notification**: Sends "Daemon recovered" message when the
+   first successful cycle happens after an alerted failure streak.
+3. **Better failure counting**: Counts actual consecutive failures from
+   the log tail instead of just checking the last N entries.
 
 ## Queue State
 
-- No P1 tasks.
 - P2: Trello integration (BLOCKED on credentials).
-- P3: research radar Wed 22:00, kid activity planner Thu 20:00.
-- INBOX empty.
+- P3: morning brief Wednesday 06:30 (~12h away).
+- Background cooldown active.
+
+## What's Next
+
+- Morning brief Wednesday 06:30.
+- Trello integration when Max provides credentials.
 
 ## Blockers
 
 - Trello: needs API key + token from Max.
+- Oubli PRs #3 and #4: BLOCKED, needs Max.

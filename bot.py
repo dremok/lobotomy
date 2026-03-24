@@ -168,8 +168,18 @@ async def run_cc_quick(
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode == 0 and stdout:
             return stdout.decode().strip()[:4000]
-    except (asyncio.TimeoutError, Exception):
-        pass
+        else:
+            err = stderr.decode().strip()[:200] if stderr else ""
+            print(f"CC failed (rc={proc.returncode}): {err}")
+    except asyncio.TimeoutError:
+        print(f"CC timed out after {timeout}s")
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"CC error: {e}")
     return ""
 
 
@@ -676,6 +686,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"Failed to persist chat_id: {e}")
 
     text = update.message.text
+    print(f"MSG from {update.effective_chat.id}: {text[:80]}")
     priority = detect_priority(text)
 
     # 1. Typing indicator
@@ -688,7 +699,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 3. CC response — the only message the user sees.
     #    CC can read files directly to answer questions.
     _conversation.append(("user", text))
+    print("Generating CC response...")
     response = await respond_via_cc(text)
+    print(f"CC response: {response[:80] if response else '(empty)'}")
     if not response:
         response = "Got your message, looking into it."
     _conversation.append(("assistant", response))
@@ -748,27 +761,56 @@ async def check_daemon_health(context: ContextTypes.DEFAULT_TYPE):
         if c.get("status") == "success":
             _last_seen_success_cycle = c.get("cycle_id", 0)
 
-    # Already alerted for this streak?
+    # Recovery notification: if last cycle succeeded and we previously alerted
+    if last.get("status") == "success" and _last_alerted_cycle > 0:
+        if _last_seen_success_cycle and _last_seen_success_cycle == last_cycle_id:
+            cycles_down = last_cycle_id - _last_alerted_cycle + FAILURE_STREAK_THRESHOLD
+            _last_alerted_cycle = 0  # Reset so future failures can alert again
+            await context.bot.send_message(
+                chat_id=AUTHORIZED_CHAT_ID,
+                text=f"Daemon recovered. Cycle #{last_cycle_id} succeeded after {cycles_down} failures.",
+            )
+            return
+
+    # Already alerted for this cycle?
     if last_cycle_id <= _last_alerted_cycle:
         return
 
+    # Count consecutive failures from the tail
+    fail_count = 0
+    for c in reversed(recent):
+        if c.get("status") == "success":
+            break
+        fail_count += 1
+
     # Check 1: Consecutive failure streak
-    tail = recent[-FAILURE_STREAK_THRESHOLD:]
-    if len(tail) >= FAILURE_STREAK_THRESHOLD:
-        statuses = [c.get("status") for c in tail]
-        if all(s != "success" for s in statuses):
+    if fail_count >= FAILURE_STREAK_THRESHOLD:
+        # Re-alert on initial threshold AND every 5 additional failures
+        failures_past_threshold = fail_count - FAILURE_STREAK_THRESHOLD
+        should_alert = (fail_count == FAILURE_STREAK_THRESHOLD
+                        or failures_past_threshold % 5 == 0)
+        if should_alert:
             # Count by failure type
+            fail_cycles = recent[-fail_count:]
             counts: dict[str, int] = {}
-            for s in statuses:
+            for c in fail_cycles:
+                s = c.get("status", "unknown")
                 counts[s] = counts.get(s, 0) + 1
             breakdown = ", ".join(f"{v}x {k}" for k, v in counts.items())
+            hours = ""
+            try:
+                first_fail_time = datetime.fromisoformat(fail_cycles[0]["timestamp"])
+                elapsed = (datetime.now() - first_fail_time).total_seconds() / 3600
+                hours = f" over {elapsed:.1f}h"
+            except (ValueError, KeyError):
+                pass
             _last_alerted_cycle = last_cycle_id
             await context.bot.send_message(
                 chat_id=AUTHORIZED_CHAT_ID,
                 text=(
-                    f"Heads up: last {len(tail)} daemon cycles all failed "
-                    f"({breakdown}). Last success was cycle "
-                    f"#{_last_seen_success_cycle or '?'}. Might need a look."
+                    f"Daemon alert: {fail_count} consecutive failures{hours} "
+                    f"({breakdown}). Last success: cycle "
+                    f"#{_last_seen_success_cycle or '?'}."
                 ),
             )
             return
