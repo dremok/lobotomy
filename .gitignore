@@ -1,18 +1,36 @@
+# Secrets & config
 config.yaml
+.env
+.mcp.json
+
+# Personal / private
+SOUL.md
+memory/
+output/
 logs/
 workspaces/
-output/
-memory/
-__pycache__/
-*.pyc
-.env
-.venv/
+
+# Queue (contains personal tasks & notes)
+queue/TASK_QUEUE.md
+queue/BACKGROUND.md
+queue/HANDOFF.md
+queue/INBOX.md
+queue/INTERRUPT.md
 queue/.wake
 queue/tg_*.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE / tooling
+.claude/
+.ruff_cache/
+
+# WhatsApp MCP
 whatsapp-mcp/node_modules/
 whatsapp-mcp/data/
 whatsapp-mcp/auth_info/
 whatsapp-mcp/mcp-logs.txt
 whatsapp-mcp/wa-logs.txt
-.claude/
-.mcp.json
