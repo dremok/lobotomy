@@ -1,19 +1,15 @@
-# Handoff — Cycle #113
+# Handoff — Cycle #114
 
-**Time**: 2026-03-24 19:11 (Tuesday)
-**Task**: Add background_timeout for non-urgent cycles
+**Time**: 2026-03-24 19:13 (Tuesday)
+**Task**: Sync config.example.yaml with actual supported options
 **Status**: Completed
 
 ## What I Did
 
-Added a `background_timeout` config option (600s / 10 min) that applies
-to non-urgent cycles. Urgent cycles (P0/P1) still use `session_timeout`
-(900s). Most successful background cycles complete in 100-270s, so 600s
-gives plenty of headroom while reducing wasted time when cycles get stuck.
-
-Changes:
-- daemon.py: select timeout based on `has_urgent_tasks()`
-- config.yaml: added `background_timeout: 600`
+Updated config.example.yaml to document all supported config options:
+added background_timeout, fallback_model, background_effort, max_budget_usd,
+email section, and trello section. These were all implemented in earlier
+cycles but the example file was stale.
 
 ## Queue State
 

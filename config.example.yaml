@@ -9,13 +9,17 @@ max_cooldown: 1800        # 30 min ceiling after repeated failures
 backoff_multiplier: 2     # Exponential backoff on rate limits
 
 # Session limits
-session_timeout: 900      # 15 min max per CC session
+session_timeout: 900      # 15 min max per CC session (urgent/P0-P1)
+background_timeout: 600   # 10 min max for background/idle cycles
 
 # Health checks
 health_check_hours: 24    # Run system health check once per day
 
 # Claude Code binary
 claude_command: claude
+fallback_model: sonnet    # Auto-fallback when primary model is overloaded
+background_effort: medium # Effort level for non-urgent cycles (low/medium/high)
+# max_budget_usd: 5.0    # Optional per-cycle cost cap
 
 # Laptop bridge (Tailscale SSH, read-only)
 laptop:
@@ -28,7 +32,20 @@ laptop:
 telegram:
   enabled: false
   token: ""               # BotFather token
-  chat_id: ""             # Your Telegram user ID (for auth)
+  chat_id: ""             # Your Telegram user ID (auto-detected on first message)
+
+# Email delivery (Gmail SMTP)
+email:
+  enabled: false
+  from: ""                # Gmail address
+  to: ""                  # Recipient address
+  app_password: ""        # Gmail app password (not regular password)
+
+# Trello integration (morning brief)
+trello:
+  key: ""                 # Trello API key (https://trello.com/power-ups/admin)
+  token: ""               # Trello API token
+  # board_id: ""          # Optional: auto-detects "Dagens TODO" board if omitted
 
 # WhatsApp group monitor
 whatsapp:
