@@ -533,7 +533,8 @@ def has_urgent_tasks() -> bool:
         elif line.startswith("###"):
             in_p1 = False
         elif in_p1 and "- [ ]" in line:
-            return True
+            if "BLOCKED" not in line.upper():
+                return True
     return False
 
 
