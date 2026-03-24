@@ -504,17 +504,20 @@ async def cmd_cost(update: Update, context: ContextTypes.DEFAULT_TYPE):
     costed = sum(1 for c in cycles if c.get("cost_usd", 0) > 0)
 
     parts = [
-        f"API Cost Tracking",
-        f"Today: ${today_cost:.2f} ({sum(1 for c in cycles if c.get('timestamp','')[:10]==today)} cycles)",
+        f"Usage Tracking (API-equivalent estimates)",
+        f"Your Max subscription covers all usage. These numbers",
+        f"show what it would cost at API rates, for comparison.",
+        f"",
+        f"Today: ~${today_cost:.2f} ({sum(1 for c in cycles if c.get('timestamp','')[:10]==today)} cycles)",
         f"  Input: {today_tokens['input']:,} | Output: {today_tokens['output']:,}",
         f"  Cache write: {today_tokens['cache_create']:,} | Cache read: {today_tokens['cache_read']:,}",
-        f"Last 7 days: ${week_cost:.2f}",
-        f"All time: ${total_cost:.2f} ({costed} cycles with cost data)",
+        f"Last 7 days: ~${week_cost:.2f}",
+        f"All time: ~${total_cost:.2f} ({costed} cycles with cost data)",
     ]
 
     if costed > 0:
         avg = total_cost / costed
-        parts.append(f"Avg per cycle: ${avg:.3f}")
+        parts.append(f"Avg per cycle: ~${avg:.3f}")
 
     if costed < len(cycles):
         parts.append(f"\nNote: {len(cycles) - costed} older cycles have no cost data (pre-tracking).")

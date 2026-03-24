@@ -412,7 +412,7 @@ def cost_summary() -> str:
             continue
     if total_cost == 0:
         return ""
-    return f"COST: ${today_cost:.2f} today, ${total_cost:.2f} all time"
+    return f"COST: ~${today_cost:.2f} today, ~${total_cost:.2f} all time (API-equivalent estimate, actual billing via Max subscription)"
 
 
 def build_prompt(
