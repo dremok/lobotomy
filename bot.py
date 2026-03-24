@@ -657,11 +657,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
 
-    # Auto-detect and save chat_id if not configured
+    # Auto-detect and persist chat_id if not configured
     global AUTHORIZED_CHAT_ID
     if AUTHORIZED_CHAT_ID is None and update.effective_chat:
         AUTHORIZED_CHAT_ID = update.effective_chat.id
         print(f"Auto-detected chat_id: {AUTHORIZED_CHAT_ID}")
+        # Persist to config.yaml so it survives bot restarts
+        try:
+            cfg_path = BASE_DIR / "config.yaml"
+            cfg_text = cfg_path.read_text()
+            cfg_text = cfg_text.replace(
+                'chat_id: ""',
+                f'chat_id: "{AUTHORIZED_CHAT_ID}"',
+            )
+            cfg_path.write_text(cfg_text)
+            print(f"Persisted chat_id to config.yaml")
+        except OSError as e:
+            print(f"Failed to persist chat_id: {e}")
 
     text = update.message.text
     priority = detect_priority(text)
