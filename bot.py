@@ -34,9 +34,10 @@ CLAUDE_CMD: str = "claude"
 EMAIL_CONFIG: dict | None = None
 LAPTOP_CONFIG: dict | None = None
 
-# Conversation history buffer (in-memory, lost on restart)
+# Conversation history buffer (persisted to file)
 _conversation: list[tuple[str, str]] = []  # (role, text)
 MAX_HISTORY = 20
+_CONVERSATION_FILE = BASE_DIR / "logs" / "conversation.jsonl"
 
 # Watcher state
 _known_outputs: set[str] = set()
@@ -47,7 +48,7 @@ POLL_INTERVAL = 60  # seconds
 _last_alerted_cycle: int = 0  # Last cycle_id we alerted about (avoid spam)
 _last_seen_success_cycle: int = 0  # Last cycle_id with status=success
 FAILURE_STREAK_THRESHOLD = 3  # Alert after N consecutive non-success cycles
-DAEMON_STALE_SECONDS = 1800  # Alert if no cycle in 30 min
+DAEMON_STALE_SECONDS = 4500  # Alert if no cycle in 75 min (background cooldown is 60 min)
 
 
 def load_config() -> dict:
@@ -184,6 +185,29 @@ async def run_cc_quick(
 
 
 # ─── CC-powered responses ──────────────────────────────────────────────────
+
+
+def _load_conversation():
+    """Load conversation history from file on startup."""
+    global _conversation
+    if _CONVERSATION_FILE.exists():
+        try:
+            lines = _CONVERSATION_FILE.read_text().strip().splitlines()
+            for line in lines[-MAX_HISTORY:]:
+                entry = json.loads(line)
+                _conversation.append((entry["role"], entry["text"]))
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass
+
+
+def _save_conversation_entry(role: str, text: str):
+    """Append a conversation entry to the persistent file."""
+    _conversation.append((role, text))
+    try:
+        with open(_CONVERSATION_FILE, "a") as f:
+            f.write(json.dumps({"role": role, "text": text[:500]}) + "\n")
+    except OSError:
+        pass
 
 
 def format_history() -> str:
@@ -686,13 +710,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3. CC response — the only message the user sees.
     #    CC can read files directly to answer questions.
-    _conversation.append(("user", text))
+    _save_conversation_entry("user", text)
     print("Generating CC response...")
     response = await respond_via_cc(text)
     print(f"CC response: {response[:80] if response else '(empty)'}")
     if not response:
         response = "Got your message, looking into it."
-    _conversation.append(("assistant", response))
+    _save_conversation_entry("assistant", response)
     await update.message.reply_text(response)
 
 
@@ -929,7 +953,7 @@ async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
 
                 # Telegram
                 if AUTHORIZED_CHAT_ID:
-                    _conversation.append(("assistant", text))
+                    _save_conversation_entry("assistant", text)
                     await context.bot.send_message(
                         chat_id=AUTHORIZED_CHAT_ID, text=text,
                     )
@@ -977,7 +1001,7 @@ async def poll_daemon_activity(context: ContextTypes.DEFAULT_TYPE):
 
     summary = await run_cc_quick(prompt, timeout=30, tools="", effort="low")
     if summary and summary.strip().upper() != "SKIP":
-        _conversation.append(("assistant", summary))
+        _save_conversation_entry("assistant", summary)
         if AUTHORIZED_CHAT_ID:
             await context.bot.send_message(
                 chat_id=AUTHORIZED_CHAT_ID, text=summary,
@@ -1003,6 +1027,7 @@ def main():
     LAPTOP_CONFIG = config.get("laptop")
 
     init_watcher_state()
+    _load_conversation()
 
     app = Application.builder().token(token).build()
 

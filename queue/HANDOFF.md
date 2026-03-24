@@ -1,28 +1,15 @@
-# Handoff — Cycle #114
+# Handoff — Cycle #63
 
-**Time**: 2026-03-24 19:13 (Tuesday)
-**Task**: Sync config.example.yaml with actual supported options
+**Time**: 2026-03-24 18:06 (Tuesday)
+**Task**: P1 — Fix bot restart conflicts
 **Status**: Completed
 
 ## What I Did
 
-Updated config.example.yaml to document all supported config options:
-added background_timeout, fallback_model, background_effort, max_budget_usd,
-email section, and trello section. These were all implemented in earlier
-cycles but the example file was stale.
+Fixed bot restart issues: added `drop_pending_updates=True` to prevent Telegram API conflicts during restarts, and suppressed transient Conflict/TimedOut errors in the error handler. Committed, pushed, bot restart signaled.
 
 ## Queue State
 
-- P2: Trello integration (BLOCKED on credentials).
-- P3: morning brief Wednesday 06:30 (~11h away).
-- Background cooldown active.
-
-## What's Next
-
-- Morning brief Wednesday 06:30.
-- Trello integration when Max provides credentials.
-
-## Blockers
-
-- Trello: needs API key + token from Max.
-- Oubli PRs #3 and #4: BLOCKED, needs Max.
+- No P1 or P2 tasks.
+- P3: morning brief Wed 06:30, research radar Wed 22:00.
+- INBOX empty.

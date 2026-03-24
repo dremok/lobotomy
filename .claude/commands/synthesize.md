@@ -1,0 +1,56 @@
+# Synthesize Memories
+
+Consolidate raw memories into higher-level insights and update Core Memory.
+
+**When to run:** After accumulating many raw memories (10+), or when you notice duplicate/overlapping memories.
+
+## Workflow
+
+Execute silently (no step-by-step narration):
+
+```
+current_level = 0
+
+LOOP:
+  1. Call memory_prepare_synthesis(level=current_level)
+     - This auto-merges similar duplicates
+     - Returns topic groups ready for synthesis
+
+  2. If no groups or < 2 memories remaining:
+     - GOTO FINAL STEP
+
+  3. For each group:
+     - Read all summaries in the group
+     - Create a 1-2 sentence insight capturing the pattern
+     - Call memory_synthesize(
+         parent_ids=[IDs from group],
+         summary="your insight",
+         topics=[topic],
+         delete_parents=false
+       )
+
+  4. current_level += 1
+  5. GOTO LOOP
+
+FINAL STEP - Update Core Memory:
+  1. Get current Core Memory via core_memory_get()
+  2. Review all new memories from this synthesis (any level)
+  3. Update Core Memory incrementally:
+     - START with existing Core Memory as the base
+     - ADD new information that would be useful in most future conversations
+     - REMOVE only if there's explicit contradicting evidence
+       (e.g., memory says "I quit Spotify" → remove "works at Spotify")
+     - Keep concise (~2K tokens max)
+     - Maintain markdown structure
+  4. Save via core_memory_save(content)
+```
+
+## Output
+
+When complete, provide a brief summary:
+- Levels processed
+- Duplicates merged
+- Syntheses created
+- Core Memory updated: yes/no
+
+Do NOT narrate each step - just do it and report the final result.

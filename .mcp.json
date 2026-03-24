@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "oubli": {
+      "command": "python",
+      "args": [
+        "-m",
+        "oubli.mcp_server"
+      ],
+      "cwd": "/home/max/lobotomy"
+    }
+  }
+}

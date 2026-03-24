@@ -3,7 +3,7 @@
 ### P1 — Time-Sensitive
 
 ### P2 — Planned
-- [ ] `trello_integration` | **Trello "Dagens TODO" in morning brief** | Code ready (trello.py). BLOCKED: needs Max to add trello.key and trello.token to config.yaml. Optionally trello.board_id if auto-detect fails.
+- [x] `trello_integration` | **Trello "Dagens TODO" in morning brief** | DONE 2026-03-24 16:35. User token received and verified. API returns boards successfully. Config updated.
 
 ### P3 — Scheduled Recurring
 - [ ] `sched_morning` | **Morning Brief** | Cron: 06:30 daily
@@ -12,6 +12,8 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774369758236` | **Trello credentials received** | 16:29 (API key works, but secret != token. Needs user token via authorize URL)
+- [x] `tg_1774369671097` | **Chat ID test** | 16:27 (auto-detection worked, ID 6625290235 persisted to config.yaml)
 - [x] `tg_1774368522940` | **Chat ID auto-detection** | 16:08 (added auto-detect in handle_message, proactive notifications were silently skipped)
 - [x] `tg_1774365433523` | **Persist session learnings** | 15:17 (saved to Oubli + LEARNINGS.md: all feedback, fixes, patterns)
 - [x] `tg_1774363569262` | **Laptop access fix** | 14:46 (config was disabled+wrong hostname, fixed to enabled+macbook-pro-2, but laptop currently offline)
