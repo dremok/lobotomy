@@ -1,30 +1,36 @@
-# Handoff — Cycle #68
+# Handoff — Cycle #69
 
-**Time**: 2026-03-24 19:05 (Tuesday)
-**Task**: GitHub incident — node_modules in repo (P1 from Telegram)
-**Status**: Completed
+**Time**: 2026-03-24 19:08 (Tuesday)
+**Task**: GitGuardian incident: WhatsApp credentials leaked in git (P1)
+**Status**: Fixed (files removed from tracking), but history still contains the secret
 
 ## What I Did
 
-Max reported a GitHub incident notification via Telegram: "dremok/lobotomy - 1 i...". Investigated and found that `whatsapp-mcp/node_modules/` (8,343 files, 1.6M lines) was tracked in git despite being in `.gitignore`. This happened because node_modules was committed before the .gitignore entry was added. GitHub was flagging dependency vulnerabilities in the committed node_modules.
+Read the actual Gmail notification via Gmail MCP. It was from **GitGuardian** (not Dependabot), flagging a "Generic High Entropy Secret" in commit `3ef6d92`. The secret was `whatsapp-mcp/auth_info/creds.json` containing WhatsApp encryption keys, identity keys, and auth secrets.
 
-Fix: `git rm -r --cached whatsapp-mcp/node_modules/` — removed from tracking while preserving the local install. Committed and pushed to origin/main. The GitHub security alerts should clear once GitHub re-scans the repo.
+Removed from git tracking (files still exist locally, already in .gitignore):
+- `whatsapp-mcp/auth_info/creds.json` (THE leaked secret)
+- `whatsapp-mcp/data/whatsapp.db*` (database files)
+- `.mcp.json` (MCP server config)
+- `whatsapp-mcp/mcp-logs.txt`
 
-## Caveat
+Previous cycle #68 had already removed `whatsapp-mcp/node_modules/` (8,343 files).
 
-I could not access Max's Gmail or GitHub Dependabot dashboard directly (no Gmail MCP, no `gh` CLI installed, Dependabot API requires auth). The diagnosis is based on strong circumstantial evidence: 8,343 node_modules files tracked in a public repo is the most likely trigger for a GitHub security notification. If the actual email was about something else, Max should forward the full text.
+## Important: Credentials still in git history
 
-## System State
+The WhatsApp creds are removed from HEAD but still exist in git history (commit `3ef6d92`). Options:
+1. **If repo stays public**: Need `git filter-branch` or BFG Repo Cleaner to purge history, then force-push. This is destructive.
+2. **Make repo private**: Simpler mitigation. Limits exposure.
+3. **Re-authenticate WhatsApp**: If the keys are considered burned, re-pair the WhatsApp connection.
 
-Stable. 68 cycles. All features working. Repo is now significantly lighter without tracked node_modules.
+This needs Max's decision. Tagged as BLOCKED.
+
+## Also noted
+
+`.claude/settings.local.json` and `.claude/CLAUDE.md` are still tracked despite `.claude/` being in .gitignore. These contain hook configs and project instructions, not secrets, but it's inconsistent. Left them for now since CLAUDE.md is explicitly referenced as "checked into the codebase" in the project instructions.
 
 ## Queue State
 
-- No remaining P1 or P2 tasks.
-- P3: morning brief Wed 06:30, research radar Wed 22:00, kid activity planner Thu 20:00.
-- INBOX cleared.
-
-## What's Next
-
-- Background radiation until morning brief Wed 06:30.
-- If Max confirms the incident was something else, will re-investigate.
+- P1: BLOCKED on Max for git history cleanup decision
+- No other P1/P2 tasks
+- P3: morning brief Wed 06:30, research radar Wed 22:00, kid activity planner Thu 20:00
