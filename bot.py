@@ -667,23 +667,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
 
-    # Auto-detect and persist chat_id if not configured
+    # Auto-detect and save chat_id if not configured
     global AUTHORIZED_CHAT_ID
     if AUTHORIZED_CHAT_ID is None and update.effective_chat:
         AUTHORIZED_CHAT_ID = update.effective_chat.id
         print(f"Auto-detected chat_id: {AUTHORIZED_CHAT_ID}")
-        # Persist to config.yaml so it survives bot restarts
-        try:
-            cfg_path = BASE_DIR / "config.yaml"
-            cfg_text = cfg_path.read_text()
-            cfg_text = cfg_text.replace(
-                'chat_id: ""',
-                f'chat_id: "{AUTHORIZED_CHAT_ID}"',
-            )
-            cfg_path.write_text(cfg_text)
-            print(f"Persisted chat_id to config.yaml")
-        except OSError as e:
-            print(f"Failed to persist chat_id: {e}")
 
     text = update.message.text
     print(f"MSG from {update.effective_chat.id}: {text[:80]}")
@@ -1019,7 +1007,13 @@ def main():
     app = Application.builder().token(token).build()
 
     async def error_handler(update, context):
-        if "NetworkError" in str(type(context.error).__name__):
+        err_type = type(context.error).__name__
+        err_str = str(context.error)
+        # Suppress transient network/restart errors
+        if "NetworkError" in err_type or "TimedOut" in err_type:
+            return
+        if "Conflict" in err_str:
+            print("Bot conflict (another instance shutting down), will resolve automatically")
             return
         print(f"Bot error: {context.error}")
 
@@ -1045,7 +1039,7 @@ def main():
     app.job_queue.run_daily(send_digest_email, time=dt_time(hour=20, minute=0))
 
     print("LOBOTOMY Telegram bot running...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
