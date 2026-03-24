@@ -657,6 +657,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         return
 
+    # Auto-detect and save chat_id if not configured
+    global AUTHORIZED_CHAT_ID
+    if AUTHORIZED_CHAT_ID is None and update.effective_chat:
+        AUTHORIZED_CHAT_ID = update.effective_chat.id
+        print(f"Auto-detected chat_id: {AUTHORIZED_CHAT_ID}")
+
     text = update.message.text
     priority = detect_priority(text)
 
