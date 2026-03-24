@@ -111,8 +111,8 @@ the last brief, not calendar data or stats. Max can check his own calendar.
 Structure:
 1. **What I did** — concrete accomplishments, features shipped, tasks
    completed. This is the primary value. Be specific about what changed.
-2. **Trello "Dagens TODO"** — top items from Max's Trello board (when
-   Trello integration is available, P2 blocked on API credentials).
+2. **Trello "Dagens TODO"** — top items from Max's Trello board. Use
+   `trello.py` (`get_dagens_todo()`). Focus on Idag/Imorgon lists.
 3. **Email** — new/important emails only. Filter out spam, promotions,
    newsletters. Lead with actionable items. Use Gmail MCP.
 4. **Calendar** — today's events + important upcoming (next 2-3 days).
