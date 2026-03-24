@@ -532,6 +532,26 @@ async def cmd_cost(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(parts))
 
 
+async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the latest morning brief instantly (no CC session needed)."""
+    if not is_authorized(update):
+        return
+    # Find most recent morning brief
+    if OUTPUT_DIR.exists():
+        briefs = sorted(
+            OUTPUT_DIR.glob("morning_brief_*.md"),
+            key=lambda f: f.stat().st_mtime, reverse=True,
+        )
+        if briefs:
+            try:
+                content = briefs[0].read_text()[:4000]
+                await update.message.reply_text(content)
+                return
+            except (OSError, UnicodeDecodeError):
+                pass
+    await update.message.reply_text("No morning brief found.")
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List all available bot commands."""
     if not is_authorized(update):
@@ -540,8 +560,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "/status - Last handoff + queue summary\n"
         "/queue - Full task queue\n"
-        "/health - Daemon cycle health metrics\n"
-        "/cost - API cost breakdown\n"
+        "/health - Daemon cycle health + cost metrics\n"
+        "/cost - Detailed cost breakdown\n"
+        "/brief - Latest morning brief\n"
         "/output [keyword] - Most recent output (filtered)\n"
         "/stop - Pause daemon\n"
         "/resume - Resume daemon\n"
@@ -951,6 +972,7 @@ def main():
     app.add_handler(CommandHandler("output", cmd_output))
     app.add_handler(CommandHandler("health", cmd_health))
     app.add_handler(CommandHandler("cost", cmd_cost))
+    app.add_handler(CommandHandler("brief", cmd_brief))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
