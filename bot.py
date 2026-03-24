@@ -717,11 +717,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not response:
         response = "Got your message, looking into it."
     # Strip any raw tool call XML that leaked from a timeout/partial response
-    if "<tool_call>" in response or "<tool_use>" in response:
-        clean = re.sub(r"<tool_call>.*?</tool_call>", "", response, flags=re.DOTALL)
-        clean = re.sub(r"<tool_use>.*?</tool_use>", "", clean, flags=re.DOTALL)
-        clean = re.sub(r"<tool_call>.*$", "", clean, flags=re.DOTALL)  # unclosed tags
-        clean = re.sub(r"<tool_use>.*$", "", clean, flags=re.DOTALL)
+    _TOOL_XML_TAGS = ["tool_call", "tool_use", "antml:function_calls", "antml:invoke"]
+    if any(f"<{tag}" in response for tag in _TOOL_XML_TAGS):
+        clean = response
+        for tag in _TOOL_XML_TAGS:
+            clean = re.sub(rf"<{tag}\b[^>]*>.*?</{tag}>", "", clean, flags=re.DOTALL)
+            clean = re.sub(rf"<{tag}\b[^>]*>.*$", "", clean, flags=re.DOTALL)  # unclosed
         response = clean.strip() or "On it, give me a moment."
     _save_conversation_entry("assistant", response)
     await update.message.reply_text(response)
