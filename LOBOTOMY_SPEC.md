@@ -370,46 +370,29 @@ You do one unit of work per cycle:
 
 **Output:** `output/morning_brief_YYYY-MM-DD.md`
 
-The subagent should compile:
+The brief leads with what was functionally accomplished. Calendar and logistics
+are secondary. The reader should wake up and immediately know what got built.
 
 ```markdown
 # Morning Brief — Thursday, March 20, 2026
 
-## Weather
-- Lund: 4°C, cloudy, rain after 14:00. Wind 6 m/s SW.
-- Dress: Jacket + rain layer for bike commute.
+## What Got Done
+- [Summarize each output/deliverable produced since last brief]
+- [Key findings, decisions, or code changes — substance, not just filenames]
+- [Cycles run, success rate, cost]
 
-## Calendar Today
-- (pulled from local calendar export or API)
-- 09:00 Choreograph standup
-- 14:00 Elysia vaccination (Vårdcentralen)
+## Queue Status
+- [P1/P2 tasks open and any blockers]
+- [What's next in the pipeline]
 
-## Kids
-- Karla (13): [any school events from synced calendar]
-- David (6, turning 7 on Monday!): [school events, birthday prep status]
-- Elysia (11 months): [developmental milestones this week, if tracked]
+## Calendar & Logistics
+- [Today's events, one line each]
+- [Kids schedule if relevant (custody switches, events)]
 
-## AI/ML News (last 24h)
-- Top 3 items from: arxiv RSS feed, Hacker News API (front page), 
-  AI news aggregator APIs
-- Any model releases, benchmark results, or tool launches
-
-## Markets
-- Portfolio watchlist: overnight moves for held ETFs
-- Flag anything >2% move with brief context
-
-## Active Work Status
-- [Auto-generated from TASK_QUEUE.md and last HANDOFF.md]
-- Tasks completed overnight
-- Today's priority queue
-
-## Transportstyrelsen
-- Days until estimated license reinstatement: N
-- Any new correspondence detected (if email access configured)
-
-## One Thing to Think About
-- [A quote, insight, or connection from recent research/reading 
-  that relates to the philosophical book project]
+## Quick Hits
+- [Email: only flag items needing action, skip receipts/newsletters]
+- [Weather: one line if notable]
+- [Markets: only flag >2% moves]
 ```
 
 ### 8.2 Weekly Digest (Cron: Sunday 20:00)
