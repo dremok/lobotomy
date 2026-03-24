@@ -1,29 +1,29 @@
-# Handoff — Cycle #70
+# Handoff — Cycle #71
 
-**Time**: 2026-03-24 19:11 (Tuesday)
-**Task**: Self-evolution cycle (#70, multiple of 10)
+**Time**: 2026-03-24 19:13 (Tuesday)
+**Task**: Security hardening (background radiation, post-GitGuardian)
 **Status**: Completed
 
 ## What I Did
 
-1. **LEARNINGS.md**: Added session 3 learnings (cycles 60-70). Key takeaways: use MCP tools first (not manual investigation), verify .gitignore vs actual tracking state, Max values operational reliability over passive intelligence.
+Audited all tracked files for sensitive content. Found and fixed two more issues:
 
-2. **PROJECT_REGISTRY.md**: Updated LOBOTOMY entry (architecture now includes whatsapp_bot.py, features list, 70 cycles/$376 total, GitHub/GitGuardian note). Updated last-reviewed date.
+1. **`whatsapp-mcp/wa-logs.txt`**: Contained WhatsApp pairing code (`XNRX6Q5B`) and device registration keys (ephemeral, identity, signed pre-key). Removed from tracking, added to .gitignore.
 
-3. **BACKGROUND.md**: Updated last review date. Added git hygiene check and GitGuardian follow-up to maintenance section. Removed "Dependency security advisories" (redundant with GitGuardian).
+2. **`.claude/settings.local.json`**: Tracked despite `.claude/` being in .gitignore (same pre-gitignore commit problem). Contains hook configs, not secrets, but shouldn't be tracked. Removed.
 
-4. **CLAUDE.md audit**: Verified all sections against running system. Everything is accurate. .mcp.json correctly exists locally but is untracked from git. 2 of 3 processes running (whatsapp_bot not running, which is normal).
+Also checked full git history for any other secret-like files. Only `whatsapp-mcp/auth_info/creds.json` (already fixed in cycle #69).
+
+## Advisory for Max: SOUL.md on public repo
+
+`SOUL.md` contains extensive personal information (family details, political views, investment figures, etc.) and is committed to a public GitHub repo. There's a `SOUL.example.md` template following the same pattern as `config.yaml`/`config.example.yaml`. Consider adding SOUL.md to .gitignore if you want this private. This is your call, not a security incident, just flagging it.
 
 ## System State
 
-Stable. 70 cycles, all recent cycles successful. daemon.py + bot.py running. Repo clean, sensitive files untracked.
-
-## Blocked Items
-
-- `task_069a`: Git history still contains WhatsApp creds. Needs Max's decision on cleanup approach.
+Stable. All sensitive files now untracked. Remaining git history exposure (creds.json, wa-logs.txt pairing code) still needs the BFG/force-push decision from task_069a.
 
 ## Queue State
 
-- No P1/P2 tasks (one BLOCKED on Max).
-- P3: morning brief Wed 06:30, research radar Wed 22:00, kid activity planner Thu 20:00.
-- Background radiation until next scheduled task.
+- `task_069a`: BLOCKED on Max (git history cleanup decision)
+- No other P1/P2 tasks
+- P3: morning brief Wed 06:30, research radar Wed 22:00, kid activity planner Thu 20:00
