@@ -3,7 +3,7 @@
 ### P1 — Time-Sensitive
 
 ### P2 — Planned
-- [ ] `trello_integration` | **Trello "Dagens TODO" in morning brief** | BLOCKED: needs Trello API key + token from Max. No Trello MCP exists. Will use REST API directly once credentials available.
+- [ ] `trello_integration` | **Trello "Dagens TODO" in morning brief** | Code ready (trello.py). BLOCKED: needs Max to add trello.key and trello.token to config.yaml. Optionally trello.board_id if auto-detect fails.
 
 ### P3 — Scheduled Recurring
 - [ ] `sched_morning` | **Morning Brief** | Cron: 06:30 daily
@@ -12,6 +12,7 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774347350921` | **Autonomy directive** | 10:15 (Max: figure out as much as possible, only ask for human-required work)
 - [x] `tg_1774347193576` | **Availability noted** | 10:13 (Max available for blockers, Trello creds requested)
 - [x] `tg_1774346994760` | **Gmail/Calendar MCP confirmed** | 10:09 (yes, verified and used for morning brief)
 - [x] `tg_1774346878103` | **Trello + morning brief spec** | 10:07 (no Trello MCP, queued as P2 blocked on credentials)
