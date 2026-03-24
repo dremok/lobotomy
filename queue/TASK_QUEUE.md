@@ -11,6 +11,8 @@
 - [ ] `sched_weekend` | **Kid Activity Planner** | Cron: Thursday 20:00
 
 ### Completed (2026-03-24)
+- [x] `tg_1774342374476` | **Morning brief rewrite** | 08:52 (rewrote to lead with functional work, not stats/calendar)
+- [x] `tg_1774317640532` | **Git commit permission** | 02:00 (Max: always commit/push, he uses separate checkout)
 - [x] `tg_1774317537181` | **Pricing fix** | 01:58 (was using Opus 4.0 prices $15/$75, corrected to Opus 4.6 $5/$25)
 - [x] `tg_1774317361878` | **Cost confusion clarified** | 01:56 (estimates based on API pricing, not actual charges on Max sub)
 - [x] `tg_1774317224951` | **Last 2 hours summary** | 01:53 (answered via bot)

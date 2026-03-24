@@ -789,23 +789,31 @@ async def send_digest_email(context: ContextTypes.DEFAULT_TYPE):
     # Handoff
     handoff = read_file(QUEUE_DIR / "HANDOFF.md")
 
-    # Build digest
+    # Check for morning brief output file (lead with substance, not stats)
     period = "morning" if datetime.now().hour < 14 else "evening"
-    lines = [
-        f"LOBOTOMY {period} digest — {today}",
-        f"",
-        f"Cycles: {total} ({successes} success, {total - successes} failed)",
-        f"Cost: ${total_cost:.2f} | Avg duration: {avg_dur:.0f}s",
-        f"Queue: {open_tasks} open, {done_tasks} done today",
-    ]
-    if output_files:
-        lines.append(f"")
-        lines.append(f"Outputs: {', '.join(output_files[:5])}")
-    if handoff.strip():
-        # First 3 lines of handoff for context
-        handoff_preview = "\n".join(handoff.strip().splitlines()[:5])
-        lines.append(f"")
-        lines.append(f"Last handoff:\n{handoff_preview}")
+    brief_path = OUTPUT_DIR / f"morning_brief_{today}.md"
+    brief_content = ""
+    if brief_path.exists():
+        try:
+            brief_content = brief_path.read_text().strip()
+        except OSError:
+            pass
+
+    if brief_content:
+        # Morning brief exists: send it as the digest (functional summary)
+        lines = [brief_content]
+        lines.append(f"\n---\nStats: {total} cycles, ~${total_cost:.2f} API-equivalent, {avg_dur:.0f}s avg")
+    else:
+        # No brief: fall back to handoff summary
+        lines = [
+            f"LOBOTOMY {period} digest — {today}",
+            f"",
+        ]
+        if handoff.strip():
+            lines.append(handoff[:2000])
+        lines.append(f"\n---\nStats: {total} cycles ({successes} success), ~${total_cost:.2f}, {avg_dur:.0f}s avg")
+        if output_files:
+            lines.append(f"Outputs: {', '.join(output_files[:5])}")
 
     send_email(f"{period.title()} Digest", "\n".join(lines))
 
