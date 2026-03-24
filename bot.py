@@ -441,9 +441,14 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     detail_lines = []
     for c in cycles[-5:]:
         ts = c.get("timestamp", "?")[11:16]  # HH:MM
+        cost_str = f", ~${c.get('cost_usd', 0):.2f}" if c.get("cost_usd") else ""
         detail_lines.append(
-            f"  #{c.get('cycle_id', '?')} {ts} {c['status']} ({c.get('duration_seconds', 0):.0f}s)"
+            f"  #{c.get('cycle_id', '?')} {ts} {c['status']} ({c.get('duration_seconds', 0):.0f}s{cost_str})"
         )
+
+    # Cost summary
+    today_cost = sum(c.get("cost_usd", 0) for c in today_cycles)
+    total_cost = sum(c.get("cost_usd", 0) for c in cycles)
 
     parts = [
         f"Daemon Health (last 20 cycles)",
@@ -451,7 +456,8 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Auth fails: {auths}, Rate limits: {rate_limits}, Errors: {errors}",
         f"Avg duration: {avg_dur:.0f}s",
         f"Last cycle: {ago_str} (#{last.get('cycle_id', '?')})",
-        f"Today: {len(today_cycles)} cycles",
+        f"Today: {len(today_cycles)} cycles, ~${today_cost:.2f}",
+        f"All time: {len(cycles)} cycles, ~${total_cost:.2f}",
         f"\nRecent:\n" + "\n".join(detail_lines),
     ]
 
