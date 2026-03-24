@@ -181,6 +181,54 @@ def detect_auth_from_events(output_lines: list[str]) -> bool:
     return False
 
 
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """Kill a process and its entire process group reliably.
+
+    Uses SIGTERM first (graceful), then SIGKILL if needed. Targets the
+    process group (start_new_session=True) so child processes are also killed.
+    """
+    pgid = None
+    try:
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, OSError):
+        pass
+
+    # Try SIGTERM to the group first
+    if pgid is not None:
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+    else:
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+
+    try:
+        proc.wait(timeout=10)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    # SIGKILL the group
+    if pgid is not None:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+    else:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass  # Give up; process is truly stuck
+
+
 def run_cc(
     prompt: str,
     workdir: str,
@@ -229,7 +277,7 @@ def run_cc(
         day_dir.mkdir(exist_ok=True)
         log_path = day_dir / f"cycle_{cycle_id:04d}_{now.strftime('%H%M')}.jsonl"
 
-    start = time.time()
+    start = time.monotonic()
     try:
         proc = subprocess.Popen(
             args,
@@ -237,6 +285,7 @@ def run_cc(
             stderr=subprocess.STDOUT,  # Merge stderr into stdout
             text=True,
             cwd=workdir,
+            start_new_session=True,  # Own process group for clean killpg
         )
         _active_process = proc
 
@@ -283,22 +332,16 @@ def run_cc(
 
         # Wait for process, with early termination on auth errors
         timed_out = False
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         while proc.poll() is None:
-            remaining = deadline - time.time()
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
-                proc.kill()
-                proc.wait()
+                _kill_process_group(proc)
                 break
             if auth_detected.wait(timeout=min(5, remaining)):
                 # Auth error in stream — kill early instead of waiting
-                proc.terminate()
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait()
+                _kill_process_group(proc)
                 break
 
         t.join(timeout=10)
@@ -311,9 +354,9 @@ def run_cc(
             log_f.close()
 
         if timed_out:
-            return {"status": "timeout", "output": "", "duration": time.time() - start}
+            return {"status": "timeout", "output": "", "duration": time.monotonic() - start}
 
-        dur = time.time() - start
+        dur = time.monotonic() - start
         raw = "".join(output_lines)
 
         # Parse stream-json: find the result event
@@ -371,7 +414,7 @@ def run_cc(
                 "cost_usd": estimate_cost_usd(usage)}
     except Exception:
         _active_process = None
-        return {"status": "error", "output": "", "duration": time.time() - start}
+        return {"status": "error", "output": "", "duration": time.monotonic() - start}
 
 
 def recent_cycles(n: int = 5) -> str:
@@ -730,12 +773,7 @@ def main():
     def shutdown(signum, _):
         log.info(f"Signal {signum}. Cleaning up.")
         if _active_process and _active_process.poll() is None:
-            _active_process.terminate()
-            try:
-                _active_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _active_process.kill()
-                _active_process.wait()
+            _kill_process_group(_active_process)
         PID_FILE.unlink(missing_ok=True)
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         lock_fd.close()
