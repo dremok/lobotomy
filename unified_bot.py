@@ -123,7 +123,14 @@ async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> st
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode == 0 and stdout:
-            return stdout.decode().strip()[:4000]
+            text = stdout.decode().strip()
+            # Strip tool call blocks that CC sometimes includes in output
+            text = re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL)
+            text = re.sub(r'<tool_result>.*?</tool_result>', '', text, flags=re.DOTALL)
+            text = re.sub(r'```[\s\S]*?```', '', text)
+            # Collapse multiple blank lines
+            text = re.sub(r'\n{3,}', '\n\n', text).strip()
+            return text[:4000]
         else:
             err = stderr.decode().strip()[:200] if stderr else ""
             print(f"CC failed (rc={proc.returncode}): {err}")
@@ -194,7 +201,8 @@ async def generate_response(
         "- Never start with 'I' if you can avoid it.\n"
         "- If you don't know something, say so.\n"
         "- You can install tools and packages on the VPS as needed. Don't say you can't do something if you could just install the tool.\n"
-        "- When Max asks you to do something that requires tools (Trello, APIs, etc.), just do it. Use Bash to curl APIs, install packages, etc."
+        "- When Max asks you to do something that requires tools (Trello, APIs, etc.), just do it. Use Bash to curl APIs, install packages, etc.\n"
+        "- CRITICAL: Your output goes directly to Telegram. Only write the final conversational message. Never include tool calls, JSON, code blocks, or technical output. Do the work silently, then report the result conversationally."
     )
 
     # Use tools for anything beyond casual chat
