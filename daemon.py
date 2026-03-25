@@ -517,6 +517,16 @@ def is_paused() -> bool:
     return "PAUSE" in content.upper()
 
 
+def is_quiet_hours() -> bool:
+    """Check if current time is in quiet hours (23:00-06:00).
+
+    During quiet hours with no urgent tasks, the daemon sleeps until
+    the next scheduled task instead of waking every background_cooldown.
+    """
+    hour = datetime.now().hour
+    return hour >= 23 or hour < 6
+
+
 def has_urgent_tasks() -> bool:
     """Check if P0 or P1 tasks exist."""
     interrupt = read_file(QUEUE_DIR / "INTERRUPT.md")
@@ -949,6 +959,11 @@ def main():
                 cooldown = config["urgent_cooldown"]
             elif has_queued_tasks():
                 cooldown = config["base_cooldown"]
+            elif is_quiet_hours():
+                # Night mode: sleep until next scheduled task (e.g. morning brief)
+                next_sched = seconds_until_next_schedule()
+                cooldown = next_sched if next_sched else config["background_cooldown"]
+                log.info(f"Quiet hours, sleeping {cooldown:.0f}s until next schedule")
             else:
                 cooldown = config["background_cooldown"]
 
