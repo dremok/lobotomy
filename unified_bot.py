@@ -151,6 +151,8 @@ def build_env_context(config: dict) -> str:
     lines = [
         "# Environment",
         "You run on a Hetzner VPS (Ubuntu 24.04, Helsinki). You are NOT on Max's laptop.",
+        "You are a persistent process (unified_bot.py) that handles Telegram and WhatsApp.",
+        "You have a heartbeat that wakes you every 20 minutes to proactively reach out if needed.",
         "You have full root-level access. You can install anything you need: pip, npm, apt, curl, etc.",
         "Project dir: /home/max/lobotomy/",
         "",
