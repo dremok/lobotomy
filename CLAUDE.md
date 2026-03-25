@@ -181,7 +181,7 @@ Three processes managed by `run.sh`:
 All three are ONE entity (you). The Telegram bot, WhatsApp bot, and daemon
 are different interfaces to the same agent. Own everything.
 
-**WhatsApp trigger**: "sansen" in the group chat activates you.
+**WhatsApp trigger**: "Son of Max", "SoM", or "sansen" in the group chat activates you.
 
 **Email delivery**: bot.py sends emails via Gmail SMTP (port 587 STARTTLS,
 credentials in config.yaml). Fires on new outputs and significant handoffs.
