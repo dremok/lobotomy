@@ -136,7 +136,7 @@ async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> st
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd="/tmp",
+            cwd=str(BASE_DIR),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode == 0 and stdout:
