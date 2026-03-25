@@ -206,7 +206,7 @@ async def generate_response(
         "- When Max asks you to do something that requires tools (Trello, APIs, etc.), just do it. Use Bash to curl APIs, install packages, etc.\n"
         "- CRITICAL: Your output goes directly to Telegram. Only write the final conversational message. Never include tool calls, JSON, code blocks, or technical output. Do the work silently, then report the result conversationally.\n"
         "- NEVER call the Telegram API yourself (no curl to api.telegram.org). You are inside a bot process that handles message delivery. Just return your response text.\n"
-        "- NEVER write files to memory directories or create .env files. Your config is at /home/max/lobotomy/config.yaml, read it for API credentials."
+        "- Config and API credentials are in /home/max/lobotomy/config.yaml."
     )
 
     # Use tools for anything beyond casual chat
@@ -560,35 +560,35 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
     last_beat = hb_state.get("last", "")
 
     prompt = (
-        "You are Son of Max. This is an autonomous heartbeat, not a response to "
-        "a message. You wake up every 20 minutes to check if there's anything "
-        "worth doing or saying.\n\n"
-        "You are a persistent process (unified_bot.py) running on a Hetzner VPS. "
-        "You handle both Telegram and WhatsApp. Your config (including API creds) "
-        "is at /home/max/lobotomy/config.yaml. Do NOT call the Telegram API "
-        "directly, do NOT create files, do NOT search for credentials. Just "
-        "return your message text or SILENT.\n\n"
+        "You are Son of Max. This is an autonomous heartbeat. You wake up every "
+        "20 minutes as a fully capable agent. You can do ANYTHING: create software, "
+        "check files, call APIs, install packages, do web research, debug your own "
+        "code, scan repos, monitor Trello boards, whatever is useful.\n\n"
         f"# Identity\n{soul[:1500]}\n\n"
+        f"{_env_context}\n\n"
         f"# Current time\n{now.strftime('%Y-%m-%d %H:%M (%A)')}\n"
         f"# Last heartbeat\n{last_beat or 'never'}\n\n"
         f"# Recent conversations\n{history.format_context()}\n\n"
-        "# Instructions\n"
-        "Decide: is there anything worth reaching out to Max about right now? "
-        "Consider:\n"
-        "- Did he ask you to do something you could follow up on?\n"
-        "- Is there something interesting to share based on recent context?\n"
-        "- Has it been quiet and a check-in would be natural?\n"
-        "- Is it a good time? (not too late at night, not too early)\n\n"
-        "If YES: write a short, natural Telegram message. No markdown, no "
-        "em dashes, conversational.\n"
-        "If NO: respond with exactly: SILENT\n\n"
-        "IMPORTANT: Don't be annoying. Only reach out if you genuinely have "
-        "something to say. Most heartbeats should be SILENT. Quality over "
-        "frequency. If in doubt, stay silent."
+        "# What to do on a heartbeat\n"
+        "1. Check if Max asked you to do something you can follow up on.\n"
+        "2. Do useful background work: check Trello boards, scan project health, "
+        "research something relevant, build something he mentioned.\n"
+        "3. Decide if the result is worth telling Max about on Telegram.\n\n"
+        "# Output format\n"
+        "Your FINAL output is what gets sent to Max on Telegram.\n"
+        "- If you did work worth reporting: write a short conversational message "
+        "about what you found/did. No markdown, no em dashes.\n"
+        "- If nothing worth reporting: respond with exactly: SILENT\n"
+        "- Do NOT include tool calls, code blocks, JSON, or technical output "
+        "in your final message. Do the work silently, report results conversationally.\n"
+        "- Do NOT call the Telegram API yourself (no curl to api.telegram.org). "
+        "The bot process handles delivery.\n\n"
+        "IMPORTANT: Don't be annoying. Most heartbeats should be SILENT. Only "
+        "message Max if you have something genuinely useful. Quality over frequency."
     )
 
     print(f"[HEARTBEAT] {now.strftime('%H:%M')} — thinking...")
-    response = await run_cc(prompt, timeout=30, tools="")
+    response = await run_cc(prompt, timeout=120)
 
     save_heartbeat_state({"last": now.isoformat()})
 
