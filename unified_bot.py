@@ -470,6 +470,88 @@ async def whatsapp_loop(bridge: WhatsAppBridge, history: MessageHistory, soul: s
         await asyncio.sleep(60)
 
 
+# ─── Heartbeat ────────────────────────────────────────────────────────────────
+
+HEARTBEAT_INTERVAL = 1200  # 20 minutes
+HEARTBEAT_FILE = BASE_DIR / "logs" / "last_heartbeat.json"
+
+
+def load_heartbeat_state() -> dict:
+    if HEARTBEAT_FILE.exists():
+        try:
+            return json.loads(HEARTBEAT_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def save_heartbeat_state(state: dict):
+    try:
+        HEARTBEAT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        HEARTBEAT_FILE.write_text(json.dumps(state))
+    except OSError:
+        pass
+
+
+async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
+    """Self-prompt every 20 minutes. Decides autonomously what to do."""
+    chat_id = context.job.data.get("chat_id")
+    history = context.job.data.get("history")
+    soul = context.job.data.get("soul")
+
+    if not chat_id:
+        return
+
+    now = datetime.now()
+    hb_state = load_heartbeat_state()
+    last_beat = hb_state.get("last", "")
+
+    prompt = (
+        "You are Son of Max. This is an autonomous heartbeat, not a response to "
+        "a message. You wake up every 20 minutes to check if there's anything "
+        "worth doing or saying.\n\n"
+        f"# Identity\n{soul[:1500]}\n\n"
+        f"# Current time\n{now.strftime('%Y-%m-%d %H:%M (%A)')}\n"
+        f"# Last heartbeat\n{last_beat or 'never'}\n\n"
+        f"# Recent conversations\n{history.format_context()}\n\n"
+        "# What you can do on a heartbeat\n"
+        "- Send Max a proactive message on Telegram if you have something "
+        "genuinely useful to say (a thought, a follow-up, a reminder)\n"
+        "- Stay silent if there's nothing worth saying\n"
+        "- You can reference recent conversations across both channels\n\n"
+        "# Instructions\n"
+        "Decide: is there anything worth reaching out to Max about right now? "
+        "Consider:\n"
+        "- Did he ask you to do something you could follow up on?\n"
+        "- Is there something interesting to share based on recent context?\n"
+        "- Has it been quiet and a check-in would be natural?\n"
+        "- Is it a good time? (not too late at night, not too early)\n\n"
+        "If YES: write a short, natural Telegram message. No markdown, no "
+        "em dashes, conversational.\n"
+        "If NO: respond with exactly: SILENT\n\n"
+        "IMPORTANT: Don't be annoying. Only reach out if you genuinely have "
+        "something to say. Most heartbeats should be SILENT. Quality over "
+        "frequency. If in doubt, stay silent."
+    )
+
+    print(f"[HEARTBEAT] {now.strftime('%H:%M')} — thinking...")
+    response = await run_cc(prompt, timeout=30, tools="")
+
+    save_heartbeat_state({"last": now.isoformat()})
+
+    if not response or response.strip().upper() == "SILENT":
+        print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent")
+        return
+
+    # Send proactive message to Max
+    print(f"[HEARTBEAT] {now.strftime('%H:%M')} — sending: {response[:80]}")
+    history.add("telegram", "Son of Max", response, is_bot=True)
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=response)
+    except Exception as e:
+        print(f"[HEARTBEAT] send error: {e}")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 
@@ -516,6 +598,9 @@ def main():
 
     signal.signal(signal.SIGTERM, shutdown)
 
+    # Heartbeat config
+    chat_id = tg_config.get("chat_id", "")
+
     # Start everything
     async def post_init(application):
         # Start WhatsApp after Telegram event loop is running
@@ -525,6 +610,18 @@ def main():
                 asyncio.create_task(whatsapp_loop(wa_bridge, history, soul))
             else:
                 print("WhatsApp not connected. Telegram-only mode.")
+
+        # Start heartbeat
+        if chat_id:
+            application.job_queue.run_repeating(
+                heartbeat,
+                interval=HEARTBEAT_INTERVAL,
+                first=HEARTBEAT_INTERVAL,  # First beat after 20 min
+                data={"chat_id": int(chat_id), "history": history, "soul": soul},
+            )
+            print(f"  Heartbeat: every {HEARTBEAT_INTERVAL // 60} min")
+        else:
+            print("  Heartbeat: disabled (no chat_id)")
 
     tg_app.post_init = post_init
 
