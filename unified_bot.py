@@ -108,6 +108,23 @@ class MessageHistory:
 # ─── CC response ─────────────────────────────────────────────────────────────
 
 
+def clean_cc_output(text: str) -> str:
+    """Strip tool calls, code blocks, and other non-conversational output."""
+    # Strip XML-style tool blocks (tool_call, tool_result, tool_use, function_calls)
+    text = re.sub(r'<(?:tool_call|tool_result|tool_use|function_calls|antml:invoke)[^>]*>.*?</(?:tool_call|tool_result|tool_use|function_calls|antml:invoke)>', '', text, flags=re.DOTALL)
+    # Strip self-closing or unclosed tool tags
+    text = re.sub(r'<(?:tool_call|tool_result|tool_use|function_calls|antml:invoke)[^>]*/>', '', text, flags=re.DOTALL)
+    # Strip JSON blocks ({"name": ..., "arguments": ...})
+    text = re.sub(r'\{"name":\s*"(?:Bash|Read|Write|Glob|Grep|Edit)".*?\}', '', text, flags=re.DOTALL)
+    # Strip code blocks
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    # Strip lines that look like tool output headers
+    text = re.sub(r'^.*<tool_.*$', '', text, flags=re.MULTILINE)
+    # Collapse blank lines
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    return text
+
+
 async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> str:
     """Run claude -p and return response text."""
     try:
@@ -124,12 +141,7 @@ async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> st
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode == 0 and stdout:
             text = stdout.decode().strip()
-            # Strip tool call blocks that CC sometimes includes in output
-            text = re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL)
-            text = re.sub(r'<tool_result>.*?</tool_result>', '', text, flags=re.DOTALL)
-            text = re.sub(r'```[\s\S]*?```', '', text)
-            # Collapse multiple blank lines
-            text = re.sub(r'\n{3,}', '\n\n', text).strip()
+            text = clean_cc_output(text)
             return text[:4000]
         else:
             err = stderr.decode().strip()[:200] if stderr else ""
