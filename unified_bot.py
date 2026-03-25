@@ -139,6 +139,33 @@ async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> st
     return ""
 
 
+def build_env_context(config: dict) -> str:
+    """Build environment context string from config."""
+    lines = [
+        "# Environment",
+        "You run on a Hetzner VPS (Ubuntu 24.04, Helsinki). You are NOT on Max's laptop.",
+        "You have full root-level access. You can install anything you need: pip, npm, apt, curl, etc.",
+        "Project dir: /home/max/lobotomy/",
+        "",
+        "# Laptop Bridge (Tailscale SSH)",
+        "Max's MacBook is reachable when online. Read-only access to his files:",
+        '  ssh -i ~/.ssh/laptop_key -o ConnectTimeout=5 -o StrictHostKeyChecking=no lobotomy@macbook-pro-2 "<cmd>"',
+        "  Paths: /Users/maxleander/code/, /Users/maxleander/projects/, /Users/maxleander/notes/",
+    ]
+    # API credentials from config
+    trello = config.get("trello", {})
+    if trello.get("api_key"):
+        lines.append("")
+        lines.append("# Trello API")
+        lines.append(f"  API key: {trello['api_key']}")
+        lines.append(f"  Token: {trello.get('api_token', '')}")
+        lines.append("  Use curl to call Trello REST API directly. Install py-trello if needed.")
+    return "\n".join(lines)
+
+
+_env_context: str = ""
+
+
 async def generate_response(
     channel: str,
     sender: str,
@@ -152,6 +179,7 @@ async def generate_response(
     prompt = (
         f"You are Son of Max, responding on {channel_label}.\n\n"
         f"# Identity\n{soul[:2000]}\n\n"
+        f"{_env_context}\n\n"
         f"# Recent conversation (TG = Telegram, WA = WhatsApp group)\n"
         f"{history.format_context()}\n\n"
         f"# Current message ({channel_label})\n{sender}: {text}\n\n"
@@ -164,18 +192,21 @@ async def generate_response(
         "- On WhatsApp (group with friends): be casual, match the group's language (Swedish or English), don't try too hard.\n"
         "- Keep responses concise. 1-3 sentences unless the topic warrants more.\n"
         "- Never start with 'I' if you can avoid it.\n"
-        "- If you don't know something, say so."
+        "- If you don't know something, say so.\n"
+        "- You can install tools and packages on the VPS as needed. Don't say you can't do something if you could just install the tool.\n"
+        "- When Max asks you to do something that requires tools (Trello, APIs, etc.), just do it. Use Bash to curl APIs, install packages, etc."
     )
 
-    # Use tools (file access, SSH to laptop) for substantive questions
-    # Skip tools for casual chat (much faster)
+    # Use tools for anything beyond casual chat
     needs_tools = any(w in text.lower() for w in [
         "file", "code", "repo", "project", "read", "check", "look at",
         "what's in", "show me", "readme", "find", "search", "laptop",
-        "oubli", "lobotomy", "build", "deploy", "create",
+        "oubli", "lobotomy", "build", "deploy", "create", "trello",
+        "board", "card", "task", "todo", "install", "run", "api",
+        "can you", "could you", "help me", "make", "write", "set up",
     ])
     tools = None if needs_tools else ""
-    timeout = 45 if needs_tools else 30
+    timeout = 60 if needs_tools else 30
 
     response = await run_cc(prompt, timeout=timeout, tools=tools)
     if not response:
@@ -566,15 +597,15 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    global CLAUDE_CMD
+    global CLAUDE_CMD, _env_context
 
     config = load_config()
     CLAUDE_CMD = config.get("claude_command", "claude")
+    _env_context = build_env_context(config)
 
     # Load identity
     soul = read_file(BASE_DIR / "SOUL.md")
     if not soul:
-        # Try VPS path
         soul = "You are Son of Max, an autonomous AI agent."
 
     # Message history (persisted)
