@@ -167,9 +167,19 @@ async def generate_response(
         "- If you don't know something, say so."
     )
 
-    response = await run_cc(prompt, timeout=30, tools="")
+    # Use tools (file access, SSH to laptop) for substantive questions
+    # Skip tools for casual chat (much faster)
+    needs_tools = any(w in text.lower() for w in [
+        "file", "code", "repo", "project", "read", "check", "look at",
+        "what's in", "show me", "readme", "find", "search", "laptop",
+        "oubli", "lobotomy", "build", "deploy", "create",
+    ])
+    tools = None if needs_tools else ""
+    timeout = 45 if needs_tools else 30
+
+    response = await run_cc(prompt, timeout=timeout, tools=tools)
     if not response:
-        # Fallback
+        # Fallback: quick text-only
         response = await run_cc(
             f"You are Son of Max. Respond briefly to: {text}",
             timeout=10, tools=""
