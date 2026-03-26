@@ -579,17 +579,17 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
         "2. Do useful background work: check Trello boards, scan project health, "
         "research something relevant, build something he mentioned.\n"
         "3. Decide if the result is worth telling Max about on Telegram.\n\n"
-        "# Output format\n"
-        "Your FINAL output is what gets sent to Max on Telegram.\n"
-        "- If you did work worth reporting: write a short conversational message "
-        "about what you found/did. No markdown, no em dashes.\n"
-        "- If nothing worth reporting: respond with exactly: SILENT\n"
-        "- Do NOT include tool calls, code blocks, JSON, or technical output "
-        "in your final message. Do the work silently, report results conversationally.\n"
-        "- Do NOT call the Telegram API yourself (no curl to api.telegram.org). "
-        "The bot process handles delivery.\n\n"
+        "# Output format (STRICT)\n"
+        "Your final output MUST start with exactly one of these on the first line:\n"
+        "  SEND\n"
+        "  SILENT\n\n"
+        "If SEND: the message to Max follows on the next lines. Keep it short, "
+        "conversational, no markdown, no em dashes.\n"
+        "If SILENT: nothing else needed.\n\n"
+        "Do NOT include tool calls, code blocks, or JSON in the message.\n"
+        "Do NOT call the Telegram API yourself. The bot handles delivery.\n\n"
         "IMPORTANT: Don't be annoying. Most heartbeats should be SILENT. Only "
-        "message Max if you have something genuinely useful. Quality over frequency."
+        "message Max if you have something genuinely useful."
     )
 
     print(f"[HEARTBEAT] {now.strftime('%H:%M')} — thinking...")
@@ -597,22 +597,29 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
     save_heartbeat_state({"last": now.isoformat()})
 
-    # Check if CC decided to stay silent (may appear anywhere in response)
-    if not response or "SILENT" in response.upper():
+    if not response:
+        print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent (no response)")
+        return
+
+    # Parse structured output: first line is SEND or SILENT
+    lines = response.strip().splitlines()
+    first_line = lines[0].strip().upper()
+
+    if first_line != "SEND":
         print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent")
         return
 
-    # Strip any trailing SILENT that CC might append
-    response = re.sub(r'\s*SILENT\s*$', '', response, flags=re.IGNORECASE).strip()
-    if not response:
-        print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent (empty after strip)")
+    # Everything after the first line is the message
+    message = "\n".join(lines[1:]).strip()
+    if not message:
+        print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent (SEND but empty message)")
         return
 
     # Send proactive message to Max
-    print(f"[HEARTBEAT] {now.strftime('%H:%M')} — sending: {response[:80]}")
-    history.add("telegram", "Son of Max", response, is_bot=True)
+    print(f"[HEARTBEAT] {now.strftime('%H:%M')} — sending: {message[:80]}")
+    history.add("telegram", "Son of Max", message, is_bot=True)
     try:
-        await context.bot.send_message(chat_id=chat_id, text=response)
+        await context.bot.send_message(chat_id=chat_id, text=message)
     except Exception as e:
         print(f"[HEARTBEAT] send error: {e}")
 
