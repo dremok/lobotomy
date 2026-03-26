@@ -221,16 +221,9 @@ async def generate_response(
         "- Config and API credentials are in /home/max/lobotomy/config.yaml."
     )
 
-    # Use tools for anything beyond casual chat
-    needs_tools = any(w in text.lower() for w in [
-        "file", "code", "repo", "project", "read", "check", "look at",
-        "what's in", "show me", "readme", "find", "search", "laptop",
-        "oubli", "lobotomy", "build", "deploy", "create", "trello",
-        "board", "card", "task", "todo", "install", "run", "api",
-        "can you", "could you", "help me", "make", "write", "set up",
-    ])
-    tools = None if needs_tools else ""
-    timeout = 60 if needs_tools else 30
+    # Always give full tool access. The effort="low" flag keeps it fast.
+    tools = None
+    timeout = 60
 
     response = await run_cc(prompt, timeout=timeout, tools=tools)
     if not response:
