@@ -597,8 +597,15 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
     save_heartbeat_state({"last": now.isoformat()})
 
-    if not response or response.strip().upper() == "SILENT":
+    # Check if CC decided to stay silent (may appear anywhere in response)
+    if not response or "SILENT" in response.upper():
         print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent")
+        return
+
+    # Strip any trailing SILENT that CC might append
+    response = re.sub(r'\s*SILENT\s*$', '', response, flags=re.IGNORECASE).strip()
+    if not response:
+        print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent (empty after strip)")
         return
 
     # Send proactive message to Max
