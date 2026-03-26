@@ -1,56 +1,38 @@
 # LOBOTOMY configuration
 # Copy to config.yaml and edit for your environment.
 
-# Cooldowns (seconds)
-base_cooldown: 300        # 5 min between cycles when tasks are queued
-urgent_cooldown: 30       # 30s when P0/P1 tasks exist
-background_cooldown: 3600 # 1 hour when only background radiation remains
-max_cooldown: 1800        # 30 min ceiling after repeated failures
-backoff_multiplier: 2     # Exponential backoff on rate limits
-
-# Session limits
-session_timeout: 900      # 15 min max per CC session (urgent/P0-P1)
-background_timeout: 600   # 10 min max for background/idle cycles
-
-# Health checks
-health_check_hours: 24    # Run system health check once per day
-
 # Claude Code binary
 claude_command: claude
-fallback_model: sonnet    # Auto-fallback when primary model is overloaded
-background_effort: medium # Effort level for non-urgent cycles (low/medium/high)
-# max_budget_usd: 5.0    # Optional per-cycle cost cap
+
+# Telegram bot
+telegram:
+  token: ""               # BotFather token
+  chat_id: ""             # Auto-detected on first message
 
 # Laptop bridge (Tailscale SSH, read-only)
 laptop:
   enabled: false
   hostname: maxs-laptop   # Tailscale hostname
   ssh_key: ~/.ssh/laptop_key
-  user: lobotomy           # Restricted read-only OS user
-
-# Telegram bot (phone steering)
-telegram:
-  enabled: false
-  token: ""               # BotFather token
-  chat_id: ""             # Your Telegram user ID (auto-detected on first message)
-
-# Email delivery (Gmail SMTP)
-email:
-  enabled: false
-  from: ""                # Gmail address
-  to: ""                  # Recipient address
-  app_password: ""        # Gmail app password (not regular password)
-
-# Trello integration (morning brief)
-trello:
-  key: ""                 # Trello API key (https://trello.com/power-ups/admin)
-  token: ""               # Trello API token
-  # board_id: ""          # Optional: auto-detects "Dagens TODO" board if omitted
+  user: lobotomy
 
 # WhatsApp group monitor
 whatsapp:
   enabled: false
-  group_jid: ""           # Group JID (e.g., "12345@g.us") or "auto" to detect
-  mcp_dir: ./whatsapp-mcp # Path to whatsapp-mcp-ts
-  triggers:               # Additional trigger phrases (besides "Son of Max" / "SoM")
+  group_jid: ""           # Group JID or "auto"
+  mcp_dir: ./whatsapp-mcp
+  triggers:
     - "sansen"
+
+# Trello API
+trello:
+  api_key: ""
+  api_secret: ""
+  api_token: ""
+
+# Email delivery (Gmail SMTP)
+email:
+  enabled: false
+  from: ""
+  to: ""
+  app_password: ""
