@@ -125,11 +125,11 @@ def clean_cc_output(text: str) -> str:
     return text
 
 
-async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None) -> str:
+async def run_cc(prompt: str, timeout: int = 45, tools: str | None = None, effort: str = "low") -> str:
     """Run claude -p and return response text."""
     try:
         args = [CLAUDE_CMD, "-p", prompt, "--dangerously-skip-permissions",
-                "--no-session-persistence", "--effort", "low"]
+                "--no-session-persistence", "--effort", effort]
         if tools is not None:
             args.extend(["--tools", tools])
         proc = await asyncio.create_subprocess_exec(
@@ -532,6 +532,7 @@ async def whatsapp_loop(bridge: WhatsAppBridge, history: MessageHistory, soul: s
 
 HEARTBEAT_INTERVAL = 1200  # 20 minutes
 HEARTBEAT_FILE = BASE_DIR / "logs" / "last_heartbeat.json"
+HEARTBEAT_LOG = BASE_DIR / "logs" / "heartbeat_work.log"
 
 
 def load_heartbeat_state() -> dict:
@@ -564,6 +565,16 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
     hb_state = load_heartbeat_state()
     last_beat = hb_state.get("last", "")
 
+    # Load recent heartbeat work log
+    recent_work = ""
+    try:
+        if HEARTBEAT_LOG.exists():
+            work_lines = HEARTBEAT_LOG.read_text().splitlines()[-5:]
+            if work_lines:
+                recent_work = "\n".join(work_lines)
+    except OSError:
+        pass
+
     prompt = (
         "You are Son of Max. This is an autonomous heartbeat. You wake up every "
         "20 minutes as a fully capable agent. You can do ANYTHING: create software, "
@@ -573,6 +584,7 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
         f"{_env_context}\n\n"
         f"# Current time\n{now.strftime('%Y-%m-%d %H:%M (%A)')}\n"
         f"# Last heartbeat\n{last_beat or 'never'}\n\n"
+        + (f"# Recent heartbeat work log\n{recent_work}\n\n" if recent_work else "")
         f"# Recent conversations\n{history.format_context()}\n\n"
         "# What to do on a heartbeat\n"
         "1. Check if Max asked you to do something you can follow up on.\n"
@@ -593,9 +605,23 @@ async def heartbeat(context: ContextTypes.DEFAULT_TYPE):
     )
 
     print(f"[HEARTBEAT] {now.strftime('%H:%M')} — thinking...")
-    response = await run_cc(prompt, timeout=120)
+    response = await run_cc(prompt, timeout=120, effort="high")
 
     save_heartbeat_state({"last": now.isoformat()})
+
+    # Log heartbeat work
+    try:
+        log_line = f"[{now.strftime('%Y-%m-%d %H:%M')}] {response[:200] if response else 'no response'}\n"
+        HEARTBEAT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(HEARTBEAT_LOG, "a") as f:
+            f.write(log_line)
+        # Keep log file from growing too large (last 50 entries)
+        if HEARTBEAT_LOG.exists():
+            lines = HEARTBEAT_LOG.read_text().splitlines()
+            if len(lines) > 50:
+                HEARTBEAT_LOG.write_text("\n".join(lines[-50:]) + "\n")
+    except OSError:
+        pass
 
     if not response:
         print(f"[HEARTBEAT] {now.strftime('%H:%M')} — silent (no response)")
